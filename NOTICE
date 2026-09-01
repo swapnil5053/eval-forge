@@ -1,0 +1,11 @@
+EvalForge
+Copyright 2026 Swapnil Kumar
+
+This product includes software developed at Comet ML, Inc.
+  Opik - https://github.com/comet-ml/opik
+  Copyright 2024 Comet ML, Inc
+  Licensed under the Apache License, Version 2.0
+
+Portions of evalforge.core (the tracing decorator and context propagation model)
+and evalforge.eval (metric structure and judge prompt templates) are adapted from
+Opik's Python SDK. See ATTRIBUTION.md for the full breakdown.

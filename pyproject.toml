@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "evalforge"
+version = "0.1.0"
+description = "A lightweight LLM evaluation workbench for individual developers."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Swapnil Kumar", email = "swapnil160305@gmail.com" }]
+keywords = ["llm", "evaluation", "tracing", "observability", "duckdb"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = ["duckdb>=1.0", "click>=8.1", "rich>=13.0"]
+
+[project.optional-dependencies]
+cost = ["litellm>=1.60"]
+dashboard = ["reflex>=0.6"]
+all = ["evalforge[cost,dashboard]"]
+
+[project.urls]
+Homepage = "https://github.com/swapnil5053/evalforge"
+Source = "https://github.com/swapnil5053/evalforge"
+
+[project.scripts]
+evalforge = "evalforge.cli.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evalforge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
