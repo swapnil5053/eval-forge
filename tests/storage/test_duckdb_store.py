@@ -1,4 +1,5 @@
 import datetime
+import json
 
 import pytest
 
@@ -94,3 +95,10 @@ def test_read_only_connection_cannot_write(tmp_path):
 def test_unknown_table_is_rejected(store):
     with pytest.raises(ValueError, match="unknown table"):
         store.count("spans; DROP TABLE spans")
+
+
+def test_string_output_is_stored_as_valid_json(store):
+    store.upsert_spans([span_record(output="Paris is the capital.")])
+
+    stored, = store.db.execute("SELECT output FROM spans WHERE id = 's1'").fetchone()
+    assert json.loads(stored) == "Paris is the capital."

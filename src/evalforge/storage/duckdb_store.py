@@ -15,10 +15,9 @@ from typing import Any, Iterable, Optional
 import duckdb
 
 from ..core.spool import default_home
+from . import migrations
 
 LOGGER = logging.getLogger(__name__)
-
-SCHEMA_PATH = Path(__file__).with_name("schemas.sql")
 
 _TRACE_COLUMNS = ("id", "name", "start_time", "end_time", "status", "tags", "metadata")
 _SPAN_COLUMNS = (
@@ -45,6 +44,17 @@ _JSON_COLUMNS = frozenset({"tags", "metadata", "input", "output"})
 # Spool records are partial by design: a span is written once when it starts and
 # again when it ends. These fill the columns the first write cannot know.
 _DEFAULTS = {"status": "ok", "type": "general", "source": "sdk"}
+_COUNTABLE_TABLES = frozenset(
+    {
+        "traces",
+        "spans",
+        "feedback_scores",
+        "datasets",
+        "dataset_items",
+        "experiments",
+        "experiment_results",
+    }
+)
 _TIME_COLUMNS = frozenset({"start_time", "end_time", "created_at"})
 
 
@@ -62,7 +72,7 @@ class Store:
             self.path.parent.mkdir(parents=True, exist_ok=True)
         self.db = duckdb.connect(str(self.path), read_only=read_only)
         if not read_only:
-            self.db.execute(SCHEMA_PATH.read_text(encoding="utf-8"))
+            migrations.apply(self.db)
 
     def close(self) -> None:
         self.db.close()
@@ -83,7 +93,7 @@ class Store:
         return self._upsert("feedback_scores", _SCORE_COLUMNS, records)
 
     def count(self, table: str) -> int:
-        if table not in ("traces", "spans", "feedback_scores"):
+        if table not in _COUNTABLE_TABLES:
             raise ValueError(f"unknown table: {table}")
         return self.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
 
@@ -118,7 +128,9 @@ def _encode(column: str, value: Any) -> Any:
     if value is None:
         return None
     if column in _JSON_COLUMNS:
-        return json.dumps(value) if not isinstance(value, str) else value
+        # Spool values arrive already decoded, so a str here is a plain string
+        # output and still needs quoting to be valid JSON.
+        return json.dumps(value)
     if column in _TIME_COLUMNS and isinstance(value, str):
         return datetime.datetime.fromisoformat(value)
     return value

@@ -43,11 +43,15 @@ answer("What is the capital of France?")
 ```
 
 ```bash
-evalforge ingest     # load spooled traces into DuckDB
-evalforge status
+evalforge ingest              # load spooled traces into DuckDB
+evalforge trace list          # recent traces
+evalforge trace show 1b4343ea # span tree for one trace (id prefix is enough)
+evalforge trace stats         # volume, p50/p95/p99, error rate, tokens, spend
+evalforge trace search paris  # search names, inputs and outputs
+evalforge trace slow --threshold-ms 500
 ```
 
-Then query them however you like:
+Or query them yourself - it is just a DuckDB file:
 
 ```bash
 duckdb ~/.evalforge/evalforge.db \
@@ -68,8 +72,9 @@ simply wait in the spool.
 
 ## Status
 
-Tracing, spool ingestion, DuckDB storage and the base CLI are in place. The
-evaluation engine, faithfulness audit, dashboard and MCP server are next.
+Tracing, spool ingestion, DuckDB storage with versioned migrations, the trace
+analytics queries and the CLI are in place. The evaluation engine, faithfulness
+audit, dashboard and MCP server are next.
 
 ## License
 
