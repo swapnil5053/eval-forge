@@ -21,7 +21,7 @@ def store(tmp_path, monkeypatch):
 
 
 def _seed(store):
-    store.upsert_traces(
+    store.upsert("traces", 
         [
             {"id": "t1", "name": "rag", "start_time": iso(0), "end_time": iso(0.1), "status": "ok"},
             {"id": "t2", "name": "rag", "start_time": iso(10), "end_time": iso(12), "status": "ok"},
@@ -34,7 +34,7 @@ def _seed(store):
             },
         ]
     )
-    store.upsert_spans(
+    store.upsert("spans", 
         [
             {
                 "id": "s1",

@@ -11,7 +11,7 @@ import json
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -57,9 +57,9 @@ def ingest_once(store: Store, spool_dir: Optional[Path] = None) -> IngestResult:
     for path in sorted(spool_dir.glob(f"*{SEALED_SUFFIX}")):
         batches, skipped = _read(path)
         result.skipped_lines += skipped
-        result.traces += store.upsert_traces(batches["traces"])
-        result.spans += store.upsert_spans(batches["spans"])
-        result.feedback_scores += store.upsert_feedback_scores(batches["feedback_scores"])
+        result.traces += store.upsert("traces", batches["traces"])
+        result.spans += store.upsert("spans", batches["spans"])
+        result.feedback_scores += store.upsert("feedback_scores", batches["feedback_scores"])
         path.unlink(missing_ok=True)
         result.files += 1
 

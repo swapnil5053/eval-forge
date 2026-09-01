@@ -96,6 +96,14 @@ class SpoolWriter:
         with self._lock:
             self._flush_locked()
 
+    def rotate(self) -> None:
+        """Flush and seal the current file so an ingester can read it now."""
+        with self._lock:
+            self._flush_locked()
+            if self._handle is not None and self._lines_in_file:
+                self._seal_locked()
+                self._open_file()
+
     def close(self) -> None:
         with self._lock:
             if self._closed:
@@ -156,6 +164,22 @@ def get_writer() -> SpoolWriter:
         if _writer is None or _writer.closed:
             _writer = SpoolWriter()
         return _writer
+
+
+def active_spool_dir() -> Path:
+    """Where this process is spooling, without starting a writer that does not exist."""
+    with _writer_lock:
+        if _writer is not None and not _writer.closed:
+            return _writer.spool_dir
+    return default_spool_dir()
+
+
+def seal_active() -> None:
+    """Seal this process's spool file if it has one, so its records can be ingested."""
+    with _writer_lock:
+        writer = _writer if _writer is not None and not _writer.closed else None
+    if writer is not None:
+        writer.rotate()
 
 
 def set_writer(writer: Optional[SpoolWriter]) -> None:

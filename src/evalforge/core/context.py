@@ -17,6 +17,11 @@ _span_stack: contextvars.ContextVar[Tuple[str, ...]] = contextvars.ContextVar(
 _trace_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "evalforge_trace_id", default=None
 )
+# The last trace to finish on this thread or task, so a caller can find the trace
+# its own call produced without threading an id back through the return value.
+_last_trace_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "evalforge_last_trace_id", default=None
+)
 
 
 class ContextTokens(NamedTuple):
@@ -48,3 +53,12 @@ def exit_span(tokens: ContextTokens) -> None:
     _span_stack.reset(tokens.span)
     if tokens.trace is not None:
         _trace_id.reset(tokens.trace)
+
+
+def note_finished_trace(trace_id: str) -> None:
+    _last_trace_id.set(trace_id)
+
+
+def last_trace_id() -> Optional[str]:
+    """The id of the last trace that finished on this thread or asyncio task."""
+    return _last_trace_id.get()

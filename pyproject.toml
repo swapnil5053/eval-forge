@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "evalforge"
-version = "0.1.0"
+version = "0.2.0"
 description = "A lightweight LLM evaluation workbench for individual developers."
 readme = "README.md"
 license = "Apache-2.0"
@@ -22,12 +22,14 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Testing",
 ]
-dependencies = ["duckdb>=1.0", "click>=8.1", "rich>=13.0"]
+dependencies = ["duckdb>=1.0", "click>=8.1", "rich>=13.0", "pyyaml>=6.0"]
 
 [project.optional-dependencies]
 cost = ["litellm>=1.60"]
+eval = ["litellm>=1.60"]
+attribution = ["shap>=0.44", "numpy>=1.24"]
 dashboard = ["reflex>=0.6"]
-all = ["evalforge[cost,dashboard]"]
+all = ["evalforge[cost,eval,attribution,dashboard]"]
 
 [project.urls]
 Homepage = "https://github.com/swapnil5053/evalforge"

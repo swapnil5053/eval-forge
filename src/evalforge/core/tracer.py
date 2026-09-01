@@ -161,6 +161,7 @@ def _end(
         active.trace.end_time = span.end_time
         active.trace.status = span.status
         writer.write(active.trace.to_spool_dict("trace_end"))
+        context.note_finished_trace(active.trace.id)
 
     if active.priced_token is not None:
         _priced_outputs.reset(active.priced_token)

@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from evalforge.core import spool  # noqa: E402
+from evalforge.eval import judge  # noqa: E402
 
 
 @pytest.fixture
@@ -32,3 +33,22 @@ def read_spool(spool_dir):
         return records
 
     return read
+
+
+@pytest.fixture
+def judge_stub(monkeypatch):
+    """Replace the judge with a scripted responder and record what it was asked."""
+    calls = []
+
+    def responder(system, user, model=judge.DEFAULT_MODEL, temperature=0.0):
+        calls.append({"system": system, "user": user, "model": model})
+        for match, payload in responder.script:
+            if match in system or match in user:
+                return payload if isinstance(payload, str) else json.dumps(payload)
+        return json.dumps(responder.default)
+
+    responder.script = []
+    responder.default = {"score": 0.75, "reason": "looks fine"}
+    responder.calls = calls
+    monkeypatch.setattr(judge, "complete", responder)
+    return responder

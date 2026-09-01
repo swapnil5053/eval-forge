@@ -1,26 +1,23 @@
 """The evalforge command line."""
 
-import json
 import logging
 import time
 from pathlib import Path
 from typing import List, Optional
 
 import click
-from rich.console import Console
 from rich.table import Table
 from rich.tree import Tree
 
 from .. import __version__
 from ..core.spool import default_home, default_spool_dir
 from ..storage import queries
-from ..storage.duckdb_store import Store, default_db_path
+from ..storage.duckdb_store import Store
 from ..storage.ingest import ingest_once
-
-console = Console()
-
-STATUS_COLOURS = {"ok": "green", "error": "red"}
-TYPE_COLOURS = {"llm": "magenta", "retrieval": "cyan", "tool": "yellow"}
+from .commands_eval import commands as eval_commands
+from .support import brief as _brief
+from .support import console, cost as _cost, milliseconds as _ms
+from .support import read_only_store as _read_only, span_type as _type, status as _status
 
 
 @click.group()
@@ -234,37 +231,5 @@ def _print_groups(rows: List[queries.GroupRow], title: str, key_header: str) -> 
     console.print(table)
 
 
-def _read_only() -> Store:
-    path = default_db_path()
-    if not path.exists():
-        raise click.ClickException("no database yet - run 'evalforge init'")
-    return Store(path, read_only=True)
-
-
-def _status(status: str) -> str:
-    colour = STATUS_COLOURS.get(status, "white")
-    return f"[{colour}]{status}[/{colour}]"
-
-
-def _type(span_type: str) -> str:
-    colour = TYPE_COLOURS.get(span_type)
-    return f"[{colour}]{span_type}[/{colour}]" if colour else f"[dim]{span_type}[/dim]"
-
-
-def _ms(latency: Optional[float]) -> str:
-    if latency is None:
-        return "-"
-    return f"{latency:.0f}ms" if latency < 1000 else f"{latency / 1000:.2f}s"
-
-
-def _cost(usd: Optional[float]) -> str:
-    if not usd:
-        return "-"
-    return f"${usd:.6f}" if usd < 0.01 else f"${usd:.4f}"
-
-
-def _brief(value: object, limit: int = 160) -> str:
-    if value is None:
-        return "[dim]none[/dim]"
-    text = value if isinstance(value, str) else json.dumps(value, default=str)
-    return text if len(text) <= limit else f"{text[:limit]}..."
+for group in eval_commands():
+    cli.add_command(group)

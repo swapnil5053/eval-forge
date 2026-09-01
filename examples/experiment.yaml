@@ -1,0 +1,10 @@
+# Run with: evalforge eval run examples/experiment.yaml
+name: rag-baseline
+dataset: capitals
+task: examples.rag_pipeline:answer_item
+metrics:
+  - faithfulness
+  - hallucination
+  - answer_relevance
+model: gpt-4o-mini
+workers: 4

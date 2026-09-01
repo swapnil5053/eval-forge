@@ -1,9 +1,9 @@
-"""DuckDB storage, owned by the server process.
+"""DuckDB storage, owned by whichever process holds the write lock.
 
 DuckDB allows a single writer, so exactly one process opens the database for
-writing: whichever one runs ingestion (``evalforge ingest`` or the dashboard).
-Everything else opens it read-only. Traced applications never touch it at all -
-they append to the spool (see :mod:`evalforge.core.spool`).
+writing: whichever one runs ingestion (``evalforge ingest``, the dashboard) or an
+evaluation. Everything else opens it read-only. Traced applications never touch it
+at all - they append to the spool (see :mod:`evalforge.core.spool`).
 """
 
 import datetime
@@ -19,43 +19,53 @@ from . import migrations
 
 LOGGER = logging.getLogger(__name__)
 
-_TRACE_COLUMNS = ("id", "name", "start_time", "end_time", "status", "tags", "metadata")
-_SPAN_COLUMNS = (
-    "id",
-    "trace_id",
-    "parent_span_id",
-    "name",
-    "type",
-    "start_time",
-    "end_time",
-    "status",
-    "input",
-    "output",
-    "error",
-    "model",
-    "prompt_tokens",
-    "completion_tokens",
-    "estimated_cost_usd",
-    "tags",
-    "metadata",
-)
-_SCORE_COLUMNS = ("id", "span_id", "name", "value", "reason", "source", "created_at")
-_JSON_COLUMNS = frozenset({"tags", "metadata", "input", "output"})
+TABLES = {
+    "traces": ("id", "name", "start_time", "end_time", "status", "tags", "metadata"),
+    "spans": (
+        "id", "trace_id", "parent_span_id", "name", "type", "start_time", "end_time",
+        "status", "input", "output", "error", "model", "prompt_tokens",
+        "completion_tokens", "estimated_cost_usd", "tags", "metadata",
+    ),
+    "feedback_scores": (
+        "id", "span_id", "name", "value", "reason", "source", "created_at",
+    ),
+    "datasets": ("id", "name", "description", "created_at", "metadata"),
+    "dataset_items": (
+        "id", "dataset_id", "input", "expected_output", "metadata", "created_at",
+    ),
+    "experiments": ("id", "name", "dataset_id", "created_at", "metadata"),
+    "experiment_results": (
+        "id", "experiment_id", "dataset_item_id", "trace_id", "output", "scores",
+        "latency_ms", "error", "created_at",
+    ),
+    "faithfulness_audits": (
+        "id", "trace_id", "span_id", "query", "answer", "context", "score",
+        "claim_count", "unsupported", "contradicted", "model", "created_at",
+    ),
+    "audit_claims": (
+        "id", "audit_id", "position", "claim", "verdict", "severity", "evidence",
+        "rationale",
+    ),
+    "token_attributions": (
+        "id", "span_id", "trace_id", "method", "text", "tokens", "scores", "baseline",
+        "created_at",
+    ),
+}
+
 # Spool records are partial by design: a span is written once when it starts and
 # again when it ends. These fill the columns the first write cannot know.
 _DEFAULTS = {"status": "ok", "type": "general", "source": "sdk"}
-_COUNTABLE_TABLES = frozenset(
+_JSON_COLUMNS = frozenset(
     {
-        "traces",
-        "spans",
-        "feedback_scores",
-        "datasets",
-        "dataset_items",
-        "experiments",
-        "experiment_results",
+        "tags", "metadata", "input", "output", "expected_output", "scores", "context",
+        "evidence", "tokens",
     }
 )
 _TIME_COLUMNS = frozenset({"start_time", "end_time", "created_at"})
+
+
+class DatabaseLocked(RuntimeError):
+    """Another process holds the DuckDB write lock."""
 
 
 def default_db_path() -> Path:
@@ -63,14 +73,20 @@ def default_db_path() -> Path:
 
 
 class Store:
-    """A DuckDB connection plus the upserts ingestion needs."""
+    """A DuckDB connection plus the upserts ingestion and evaluation need."""
 
     def __init__(self, path: Optional[Path] = None, read_only: bool = False) -> None:
         self.path = Path(path) if path else default_db_path()
         self.read_only = read_only
         if str(self.path) != ":memory:":
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = duckdb.connect(str(self.path), read_only=read_only)
+        try:
+            self.db = duckdb.connect(str(self.path), read_only=read_only)
+        except duckdb.IOException as error:
+            raise DatabaseLocked(
+                f"{self.path} is locked by another process. Stop 'evalforge ingest "
+                f"--watch' or the dashboard, then try again."
+            ) from error
         if not read_only:
             migrations.apply(self.db)
 
@@ -83,21 +99,9 @@ class Store:
     def __exit__(self, *exc_info: Any) -> None:
         self.close()
 
-    def upsert_traces(self, records: Iterable[dict]) -> int:
-        return self._upsert("traces", _TRACE_COLUMNS, records)
-
-    def upsert_spans(self, records: Iterable[dict]) -> int:
-        return self._upsert("spans", _SPAN_COLUMNS, records)
-
-    def upsert_feedback_scores(self, records: Iterable[dict]) -> int:
-        return self._upsert("feedback_scores", _SCORE_COLUMNS, records)
-
-    def count(self, table: str) -> int:
-        if table not in _COUNTABLE_TABLES:
-            raise ValueError(f"unknown table: {table}")
-        return self.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
-
-    def _upsert(self, table: str, columns: tuple, records: Iterable[dict]) -> int:
+    def upsert(self, table: str, records: Iterable[dict]) -> int:
+        """Insert records, merging into any row that already has the same id."""
+        columns = self._columns(table)
         rows = [
             tuple(
                 _encode(column, record.get(column, _DEFAULTS.get(column)))
@@ -123,6 +127,17 @@ class Store:
         )
         return len(rows)
 
+    def count(self, table: str) -> int:
+        return self.db.execute(f"SELECT count(*) FROM {self._name(table)}").fetchone()[0]
+
+    def _columns(self, table: str) -> tuple:
+        return TABLES[self._name(table)]
+
+    def _name(self, table: str) -> str:
+        if table not in TABLES:
+            raise ValueError(f"unknown table: {table}")
+        return table
+
 
 def _encode(column: str, value: Any) -> Any:
     if value is None:
@@ -130,7 +145,7 @@ def _encode(column: str, value: Any) -> Any:
     if column in _JSON_COLUMNS:
         # Spool values arrive already decoded, so a str here is a plain string
         # output and still needs quoting to be valid JSON.
-        return json.dumps(value)
+        return json.dumps(value, default=str)
     if column in _TIME_COLUMNS and isinstance(value, str):
         return datetime.datetime.fromisoformat(value)
     return value

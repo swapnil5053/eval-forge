@@ -42,6 +42,34 @@ def answer(question: str) -> str:
     return response["choices"][0]["message"]["content"]
 
 
+@trace(name="rag-item")
+def answer_item(item: dict) -> dict:
+    """Entry point for `evalforge eval run`: one dataset item in, one trace out."""
+    question = item["question"]
+    context = retrieve(question)
+    response = generate(question, context)
+    return {"output": response["choices"][0]["message"]["content"], "context": context}
+
+
+def build_dataset() -> None:
+    """Create the 'capitals' dataset that examples/experiment.yaml evaluates against."""
+    from evalforge.eval import dataset
+    from evalforge.storage.duckdb_store import Store
+
+    with Store() as store:
+        if dataset.get(store, "capitals") is None:
+            dataset.create(
+                store,
+                "capitals",
+                [
+                    {"input": {"question": f"What is the capital of {country}?"},
+                     "expected_output": text.split()[0]}
+                    for country, text in DOCUMENTS.items()
+                ],
+                description="One question per document in the toy corpus.",
+            )
+
+
 def main() -> None:
     questions = [
         "What is the capital of France?",

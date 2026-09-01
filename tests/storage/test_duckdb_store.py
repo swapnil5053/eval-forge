@@ -35,7 +35,7 @@ def test_schema_is_created(store):
 
 
 def test_insert_and_read_back(store):
-    store.upsert_spans([span_record()])
+    store.upsert("spans", [span_record()])
 
     row = store.db.execute(
         "SELECT name, status, start_time, input FROM spans WHERE id = 's1'"
@@ -47,8 +47,8 @@ def test_insert_and_read_back(store):
 
 
 def test_start_then_end_merges_into_one_row(store):
-    store.upsert_spans([span_record()])
-    store.upsert_spans(
+    store.upsert("spans", [span_record()])
+    store.upsert("spans", 
         [
             span_record(
                 end_time="2026-09-01T10:00:02+00:00",
@@ -72,8 +72,8 @@ def test_start_then_end_merges_into_one_row(store):
 
 
 def test_a_later_null_does_not_erase_a_value(store):
-    store.upsert_spans([span_record(model="gpt-4o", prompt_tokens=10)])
-    store.upsert_spans([span_record()])
+    store.upsert("spans", [span_record(model="gpt-4o", prompt_tokens=10)])
+    store.upsert("spans", [span_record()])
 
     row = store.db.execute(
         "SELECT model, prompt_tokens FROM spans WHERE id = 's1'"
@@ -84,12 +84,12 @@ def test_a_later_null_does_not_erase_a_value(store):
 def test_read_only_connection_cannot_write(tmp_path):
     path = tmp_path / "evalforge.db"
     with Store(path) as store:
-        store.upsert_spans([span_record()])
+        store.upsert("spans", [span_record()])
 
     with Store(path, read_only=True) as reader:
         assert reader.count("spans") == 1
         with pytest.raises(Exception):
-            reader.upsert_spans([span_record("s2")])
+            reader.upsert("spans", [span_record("s2")])
 
 
 def test_unknown_table_is_rejected(store):
@@ -98,7 +98,7 @@ def test_unknown_table_is_rejected(store):
 
 
 def test_string_output_is_stored_as_valid_json(store):
-    store.upsert_spans([span_record(output="Paris is the capital.")])
+    store.upsert("spans", [span_record(output="Paris is the capital.")])
 
     stored, = store.db.execute("SELECT output FROM spans WHERE id = 's1'").fetchone()
     assert json.loads(stored) == "Paris is the capital."
