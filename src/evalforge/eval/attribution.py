@@ -24,6 +24,7 @@ import re
 from typing import Callable, List, Optional, Sequence
 
 from ..core.models import new_id, utcnow
+from ..storage import queries
 from ..storage.duckdb_store import Store
 
 LOGGER = logging.getLogger(__name__)
@@ -162,7 +163,8 @@ def save(store: Store, attribution: Attribution) -> None:
 def for_span(store: Store, span_id: str) -> Optional[Attribution]:
     row = store.db.execute(
         """
-        SELECT id, text, tokens, scores, method, baseline, created_at, span_id, trace_id
+        SELECT id, text, tokens, scores, method, baseline, epoch_ms(created_at),
+               span_id, trace_id
         FROM token_attributions WHERE span_id = ? ORDER BY created_at DESC LIMIT 1
         """,
         [span_id],
@@ -170,7 +172,7 @@ def for_span(store: Store, span_id: str) -> Optional[Attribution]:
     if row is None:
         return None
 
-    identifier, text, tokens, scores, method, baseline, created_at, span, trace = row
+    identifier, text, tokens, scores, method, baseline, created_ms, span, trace = row
     return Attribution(
         id=identifier,
         text=text,
@@ -178,7 +180,7 @@ def for_span(store: Store, span_id: str) -> Optional[Attribution]:
         scores=json.loads(scores),
         method=method,
         baseline=baseline,
-        created_at=created_at,
+        created_at=queries.moment(created_ms),
         span_id=span,
         trace_id=trace,
     )

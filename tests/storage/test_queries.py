@@ -189,3 +189,81 @@ def test_trace_detail_missing_id(store):
 def test_ambiguous_prefix_is_rejected(store):
     with pytest.raises(ValueError, match="more than one trace"):
         queries.trace_detail(store, "t")
+
+
+def test_browse_traces_pages_and_sorts(store):
+    page = queries.browse_traces(store, limit=2, offset=0, sort="latency")
+    assert [row.id for row in page] == ["t2", "t3"]
+
+    assert [row.id for row in queries.browse_traces(store, limit=2, offset=2, sort="latency")] == [
+        "t1"
+    ]
+    assert [
+        row.id for row in queries.browse_traces(store, sort="latency", descending=False)
+    ] == ["t1", "t3", "t2"]
+
+
+def test_browse_traces_by_name_and_cost(store):
+    assert [row.name for row in queries.browse_traces(store, sort="name", descending=False)] == [
+        "rag",
+        "rag",
+        "summarise",
+    ]
+    assert queries.browse_traces(store, sort="cost")[0].id == "t2"
+
+
+def test_browse_traces_search_narrows_the_page(store):
+    assert [row.id for row in queries.browse_traces(store, search="Tokyo")] == ["t2"]
+    assert queries.count_traces(store, "Tokyo") == 1
+    assert queries.count_traces(store) == 3
+
+
+def test_browse_traces_rejects_an_unknown_sort(store):
+    with pytest.raises(ValueError, match="sort must be one of"):
+        queries.browse_traces(store, sort="vibes")
+
+
+def test_daily_series_fills_days_with_no_traces(store):
+    series = queries.daily_series(store, days=5)
+
+    assert len(series) == 5
+    assert [point.day for point in series] == sorted(point.day for point in series)
+
+    seeded = {point.day: point for point in series}[BASE.date()]
+    assert seeded.traces == 3
+    assert seeded.errors == 1
+    assert sum(point.traces for point in series) == 3
+    empty = [point for point in series if point.day != BASE.date()]
+    assert all(point.p95_latency_ms is None for point in empty)
+
+
+def test_daily_series_counts_today(store):
+    with pytest.MonkeyPatch.context() as patch:
+        today = datetime.datetime.now(datetime.timezone.utc)
+        store.upsert(
+            "traces",
+            [
+                {"id": "t9", "name": "rag", "start_time": today,
+                 "end_time": today + datetime.timedelta(milliseconds=200), "status": "error"}
+            ],
+        )
+        patch.undo()
+
+    series = queries.daily_series(store, days=2)
+    assert series[-1].traces == 1
+    assert series[-1].errors == 1
+    assert series[-1].p95_latency_ms == pytest.approx(200, abs=1)
+
+
+def test_recent_errors_reports_the_exception_line(store):
+    rows = queries.recent_errors(store)
+
+    assert [row.span_name for row in rows] == ["summarise"]
+    assert rows[0].message == "ValueError: empty document"
+    assert rows[0].trace_id == "t3"
+
+
+def test_timestamps_come_back_as_utc_datetimes(store):
+    row = queries.recent_traces(store, limit=1)[0]
+    assert row.start_time.tzinfo is not None
+    assert row.start_time.utcoffset() == datetime.timedelta(0)

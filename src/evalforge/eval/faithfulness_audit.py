@@ -317,7 +317,8 @@ def load(store: Store, audit_id: str) -> Optional[FaithfulnessAudit]:
     """Read back a saved audit. ``audit_id`` may be an id prefix."""
     rows = store.db.execute(
         """
-        SELECT id, trace_id, span_id, query, answer, context, model, created_at
+        SELECT id, trace_id, span_id, query, answer, context, model,
+               epoch_ms(created_at)
         FROM faithfulness_audits WHERE id LIKE ? LIMIT 2
         """,
         [f"{audit_id}%"],
@@ -327,7 +328,7 @@ def load(store: Store, audit_id: str) -> Optional[FaithfulnessAudit]:
     if len(rows) > 1:
         raise ValueError(f"audit id prefix {audit_id!r} matches more than one audit")
 
-    identifier, trace_id, span_id, query, answer, context, model, created_at = rows[0]
+    identifier, trace_id, span_id, query, answer, context, model, created_ms = rows[0]
     claims = store.db.execute(
         """
         SELECT claim, verdict, evidence, rationale
@@ -351,7 +352,7 @@ def load(store: Store, audit_id: str) -> Optional[FaithfulnessAudit]:
             for claim, verdict, evidence, rationale in claims
         ],
         model=model,
-        created_at=created_at,
+        created_at=queries.moment(created_ms),
         trace_id=trace_id,
         span_id=span_id,
     )
@@ -361,7 +362,8 @@ def recent(store: Store, limit: int = 20) -> List[dict]:
     """Saved audits, newest first, as plain dicts for listing."""
     rows = store.db.execute(
         """
-        SELECT id, trace_id, query, score, claim_count, unsupported, contradicted, created_at
+        SELECT id, trace_id, query, score, claim_count, unsupported, contradicted,
+               epoch_ms(created_at)
         FROM faithfulness_audits ORDER BY created_at DESC LIMIT ?
         """,
         [limit],
@@ -370,7 +372,9 @@ def recent(store: Store, limit: int = 20) -> List[dict]:
         "id", "trace_id", "query", "score", "claim_count",
         "unsupported", "contradicted", "created_at",
     )
-    return [dict(zip(columns, row)) for row in rows]
+    return [
+        dict(zip(columns, row[:-1] + (queries.moment(row[-1]),))) for row in rows
+    ]
 
 
 def _as_passages(value: Any) -> List[str]:

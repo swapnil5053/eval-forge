@@ -13,12 +13,21 @@ from typing import Any, List, Optional, Tuple
 from .duckdb_store import Store
 
 GROUP_COLUMNS = {"model": "s.model", "function": "s.name", "trace": "t.name"}
+SORT_COLUMNS = {
+    "started": "started_ms",
+    "name": "t.name",
+    "status": "t.status",
+    "latency": "latency_ms",
+    "spans": "span_count",
+    "tokens": "tokens",
+    "cost": "cost_usd",
+}
 
 _TRACE_SELECT = """
 SELECT t.id,
        t.name,
        t.status,
-       t.start_time,
+       epoch_ms(t.start_time) AS started_ms,
        epoch_ms(t.end_time) - epoch_ms(t.start_time) AS latency_ms,
        count(s.id) AS span_count,
        coalesce(sum(s.estimated_cost_usd), 0) AS cost_usd,
@@ -75,6 +84,24 @@ class SpanRow:
 
 
 @dataclasses.dataclass
+class SeriesPoint:
+    day: datetime.date
+    traces: int
+    errors: int
+    p50_latency_ms: Optional[float]
+    p95_latency_ms: Optional[float]
+    p99_latency_ms: Optional[float]
+
+
+@dataclasses.dataclass
+class ErrorRow:
+    trace_id: str
+    span_name: str
+    start_time: datetime.datetime
+    message: str
+
+
+@dataclasses.dataclass
 class GroupRow:
     key: str
     spans: int
@@ -85,6 +112,18 @@ class GroupRow:
     @property
     def tokens(self) -> int:
         return self.prompt_tokens + self.completion_tokens
+
+
+def moment(epoch_ms: Optional[float]) -> Optional[datetime.datetime]:
+    """Rebuild a UTC datetime from epoch milliseconds.
+
+    Timestamps come back as numbers rather than TIMESTAMPTZ on purpose: DuckDB
+    needs pytz installed to hand Python a timezone-aware value, and reading our own
+    timestamps should not depend on a package the base install does not carry.
+    """
+    if epoch_ms is None:
+        return None
+    return datetime.datetime.fromtimestamp(epoch_ms / 1000, datetime.timezone.utc)
 
 
 def since(hours: float) -> datetime.datetime:
@@ -141,10 +180,140 @@ def trace_summary(store: Store, hours: float = 24) -> TraceSummary:
 def recent_traces(store: Store, limit: int = 20, hours: Optional[float] = None) -> List[TraceRow]:
     where, parameters = ("WHERE t.start_time >= ?", [since(hours)]) if hours else ("", [])
     rows = store.db.execute(
-        f"{_TRACE_SELECT} {where} GROUP BY ALL ORDER BY t.start_time DESC LIMIT ?",
+        f"{_TRACE_SELECT} {where} GROUP BY ALL ORDER BY started_ms DESC LIMIT ?",
         parameters + [limit],
     ).fetchall()
     return [_trace_row(row) for row in rows]
+
+
+def browse_traces(
+    store: Store,
+    limit: int = 50,
+    offset: int = 0,
+    sort: str = "started",
+    descending: bool = True,
+    search: str = "",
+) -> List[TraceRow]:
+    """One page of the trace table: searched, sorted by any column, offset for paging."""
+    column = SORT_COLUMNS.get(sort)
+    if column is None:
+        raise ValueError(f"sort must be one of {sorted(SORT_COLUMNS)}, got {sort!r}")
+
+    where, parameters = "", []
+    if search:
+        pattern = f"%{search}%"
+        where = """
+        WHERE t.name ILIKE ?
+           OR t.id IN (
+                SELECT trace_id FROM spans
+                WHERE name ILIKE ?
+                   OR CAST(input AS VARCHAR) ILIKE ?
+                   OR CAST(output AS VARCHAR) ILIKE ?
+           )
+        """
+        parameters = [pattern] * 4
+
+    direction = "DESC" if descending else "ASC"
+    rows = store.db.execute(
+        f"""{_TRACE_SELECT} {where}
+        GROUP BY ALL
+        ORDER BY {column} {direction} NULLS LAST
+        LIMIT ? OFFSET ?
+        """,
+        parameters + [limit, offset],
+    ).fetchall()
+    return [_trace_row(row) for row in rows]
+
+
+def count_traces(store: Store, search: str = "") -> int:
+    if not search:
+        return store.count("traces")
+    pattern = f"%{search}%"
+    return store.db.execute(
+        """
+        SELECT count(*) FROM traces t
+        WHERE t.name ILIKE ?
+           OR t.id IN (
+                SELECT trace_id FROM spans
+                WHERE name ILIKE ?
+                   OR CAST(input AS VARCHAR) ILIKE ?
+                   OR CAST(output AS VARCHAR) ILIKE ?
+           )
+        """,
+        [pattern] * 4,
+    ).fetchone()[0]
+
+
+def daily_series(store: Store, days: int = 7) -> List[SeriesPoint]:
+    """Trace volume, errors and latency percentiles per day, oldest day first.
+
+    Days with no traces are returned as zero rows rather than omitted, so a chart
+    shows the gap instead of drawing straight through it.
+    """
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days - 1)
+    ).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    rows = store.db.execute(
+        """
+        SELECT CAST(start_time AS DATE) AS day,
+               count(*),
+               count(*) FILTER (WHERE status = 'error'),
+               quantile_cont(epoch_ms(end_time) - epoch_ms(start_time), 0.5),
+               quantile_cont(epoch_ms(end_time) - epoch_ms(start_time), 0.95),
+               quantile_cont(epoch_ms(end_time) - epoch_ms(start_time), 0.99)
+        FROM traces
+        WHERE start_time >= ?
+        GROUP BY ALL
+        """,
+        [cutoff],
+    ).fetchall()
+
+    measured = {row[0]: row for row in rows}
+    series = []
+    for offset in range(days):
+        day = (cutoff + datetime.timedelta(days=offset)).date()
+        row = measured.get(day)
+        series.append(
+            SeriesPoint(
+                day=day,
+                traces=row[1] if row else 0,
+                errors=row[2] if row else 0,
+                p50_latency_ms=row[3] if row else None,
+                p95_latency_ms=row[4] if row else None,
+                p99_latency_ms=row[5] if row else None,
+            )
+        )
+    return series
+
+
+def recent_errors(store: Store, limit: int = 10) -> List[ErrorRow]:
+    """The most recent failing spans, newest first."""
+    rows = store.db.execute(
+        """
+        SELECT trace_id, name, epoch_ms(start_time), coalesce(error, '')
+        FROM spans
+        WHERE status = 'error'
+        ORDER BY start_time DESC
+        LIMIT ?
+        """,
+        [limit],
+    ).fetchall()
+    return [
+        ErrorRow(
+            trace_id=trace_id,
+            span_name=name,
+            start_time=moment(started_ms),
+            message=_last_line(message),
+        )
+        for trace_id, name, started_ms, message in rows
+    ]
+
+
+def _last_line(traceback_text: str) -> str:
+    """A traceback's final line is the exception; that is what a table should show."""
+    lines = [line.strip() for line in traceback_text.strip().splitlines() if line.strip()]
+    return lines[-1] if lines else ""
 
 
 def slow_traces(store: Store, threshold_ms: float, limit: int = 20) -> List[TraceRow]:
@@ -179,7 +348,7 @@ def search_traces(store: Store, query: str, limit: int = 50) -> List[TraceRow]:
                    OR CAST(output AS VARCHAR) ILIKE ?
            )
         GROUP BY ALL
-        ORDER BY t.start_time DESC
+        ORDER BY started_ms DESC
         LIMIT ?
         """,
         [pattern, pattern, pattern, pattern, limit],
@@ -199,7 +368,8 @@ def trace_detail(store: Store, trace_id: str) -> Tuple[Optional[TraceRow], List[
 
     spans = store.db.execute(
         """
-        SELECT id, trace_id, parent_span_id, name, type, status, start_time,
+        SELECT id, trace_id, parent_span_id, name, type, status,
+               epoch_ms(start_time) AS started_ms,
                epoch_ms(end_time) - epoch_ms(start_time) AS latency_ms,
                input, output, error, model, prompt_tokens, completion_tokens,
                estimated_cost_usd
@@ -280,7 +450,7 @@ def _trace_row(row: tuple) -> TraceRow:
         id=row[0],
         name=row[1],
         status=row[2],
-        start_time=row[3],
+        start_time=moment(row[3]),
         latency_ms=row[4],
         span_count=row[5],
         cost_usd=float(row[6]),
@@ -296,7 +466,7 @@ def _span_row(row: tuple) -> SpanRow:
         name=row[3],
         type=row[4],
         status=row[5],
-        start_time=row[6],
+        start_time=moment(row[6]),
         latency_ms=row[7],
         input=_load_json(row[8]),
         output=_load_json(row[9]),

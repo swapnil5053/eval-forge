@@ -5,7 +5,7 @@ from .core.tracer import trace
 from .eval.experiment import evaluate
 from .eval.metrics import Score
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "FeedbackScore",

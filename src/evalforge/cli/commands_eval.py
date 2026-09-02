@@ -13,6 +13,7 @@ from ..eval import dataset as dataset_module
 from ..eval import faithfulness_audit, metrics
 from ..eval.experiment import ExperimentResult, evaluate
 from ..eval.judge import DEFAULT_MODEL
+from ..storage import queries
 from ..storage.duckdb_store import Store
 from .support import brief as _brief
 from .support import console, read_only_store as _read_only
@@ -59,12 +60,13 @@ def eval_list() -> None:
     with _read_only() as store:
         rows = store.db.execute(
             """
-            SELECT e.name, coalesce(d.name, '(ad-hoc)'), count(r.id), e.created_at
+            SELECT e.name, coalesce(d.name, '(ad-hoc)'), count(r.id),
+                   epoch_ms(e.created_at)
             FROM experiments e
             LEFT JOIN datasets d ON d.id = e.dataset_id
             LEFT JOIN experiment_results r ON r.experiment_id = e.id
             GROUP BY ALL
-            ORDER BY e.created_at DESC
+            ORDER BY 4 DESC
             """
         ).fetchall()
 
@@ -75,9 +77,12 @@ def eval_list() -> None:
     table = Table(title="Experiments", header_style="dim")
     for column in ("name", "dataset", "items", "run at"):
         table.add_column(column)
-    for name, dataset_name, items, created_at in rows:
+    for name, dataset_name, items, created_ms in rows:
         table.add_row(
-            name, dataset_name, str(items), created_at.astimezone().strftime("%Y-%m-%d %H:%M")
+            name,
+            dataset_name,
+            str(items),
+            queries.moment(created_ms).astimezone().strftime("%Y-%m-%d %H:%M"),
         )
     console.print(table)
 

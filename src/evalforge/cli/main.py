@@ -15,6 +15,7 @@ from ..storage import queries
 from ..storage.duckdb_store import Store
 from ..storage.ingest import ingest_once
 from .commands_eval import commands as eval_commands
+from .serve import serve
 from .support import brief as _brief
 from .support import console, cost as _cost, milliseconds as _ms
 from .support import read_only_store as _read_only, span_type as _type, status as _status
@@ -233,3 +234,5 @@ def _print_groups(rows: List[queries.GroupRow], title: str, key_header: str) -> 
 
 for group in eval_commands():
     cli.add_command(group)
+
+cli.add_command(serve)

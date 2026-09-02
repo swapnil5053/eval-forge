@@ -112,6 +112,20 @@ Claims are ranked by severity: a contradiction outranks a gap, because the conte
 was there and the answer went against it. This is the part of EvalForge with no
 upstream equivalent.
 
+## Dashboard
+
+```bash
+evalforge serve
+```
+
+Ingests anything waiting in the spool, then serves a dark instrument panel on
+localhost:8000: metric strip, 7-day trace volume and latency percentiles, token and
+cost breakdowns, recent errors, and a trace explorer whose rows open into a
+`tree(1)`-style span view with syntax-coloured inputs and outputs.
+
+The dashboard opens DuckDB **read-only**, so it keeps working while an evaluation
+holds the write lock - it just shows the last ingested state until that finishes.
+
 ## How traces reach the database
 
 DuckDB allows one writer, so the traced application never opens it. `@trace`
@@ -127,8 +141,9 @@ simply wait in the spool.
 ## Status
 
 Tracing, spool ingestion, DuckDB storage with versioned migrations, trace
-analytics, the evaluation engine, the faithfulness audit, token attribution and
-the CLI are in place. The dashboard and the MCP server are next.
+analytics, the evaluation engine, the faithfulness audit, token attribution, the
+CLI, and the dashboard's Overview and Trace Explorer are in place. The remaining
+dashboard pages (experiments, datasets, audits) and the MCP server are next.
 
 ## License
 

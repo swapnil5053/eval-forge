@@ -6,6 +6,7 @@ import json
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from ..core.models import new_id, utcnow
+from ..storage import queries
 from ..storage.duckdb_store import Store
 
 
@@ -68,9 +69,12 @@ def create(
 
 def get(store: Store, name: str) -> Optional[Dataset]:
     row = store.db.execute(
-        "SELECT id, name, description, created_at FROM datasets WHERE name = ?", [name]
+        "SELECT id, name, description, epoch_ms(created_at) FROM datasets WHERE name = ?",
+        [name],
     ).fetchone()
-    return Dataset(*row) if row else None
+    if row is None:
+        return None
+    return Dataset(row[0], row[1], row[2], queries.moment(row[3]))
 
 
 def items(store: Store, dataset_id: str) -> List[DatasetItem]:
@@ -96,15 +100,21 @@ def items(store: Store, dataset_id: str) -> List[DatasetItem]:
 def listing(store: Store) -> List[dict]:
     rows = store.db.execute(
         """
-        SELECT d.name, d.description, count(i.id) AS items, d.created_at
+        SELECT d.name, d.description, count(i.id) AS items, epoch_ms(d.created_at)
         FROM datasets d
         LEFT JOIN dataset_items i ON i.dataset_id = d.id
         GROUP BY ALL
-        ORDER BY d.created_at DESC
+        ORDER BY 4 DESC
         """
     ).fetchall()
     return [
-        dict(zip(("name", "description", "items", "created_at"), row)) for row in rows
+        {
+            "name": name,
+            "description": description,
+            "items": items,
+            "created_at": queries.moment(created_ms),
+        }
+        for name, description, items, created_ms in rows
     ]
 
 
