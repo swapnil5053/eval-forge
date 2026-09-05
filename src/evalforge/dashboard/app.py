@@ -4,6 +4,9 @@ import reflex as rx
 
 from . import components as ui
 from . import styles
+from .pages.audits import audits
+from .pages.datasets import datasets
+from .pages.experiments import experiments
 from .pages.overview import overview
 from .pages.traces import traces
 from .state import REFRESH_MS, Panel
@@ -16,7 +19,7 @@ NAV = (
     ("audits", "/audits"),
 )
 
-BUILT = {"/", "/traces"}
+BUILT = {route for _, route in NAV}
 
 
 def shell(body: rx.Component, route: str) -> rx.Component:
@@ -130,6 +133,18 @@ def trace_explorer() -> rx.Component:
     return shell(traces(), "/traces")
 
 
+def experiment_list() -> rx.Component:
+    return shell(experiments(), "/experiments")
+
+
+def dataset_list() -> rx.Component:
+    return shell(datasets(), "/datasets")
+
+
+def audit_list() -> rx.Component:
+    return shell(audits(), "/audits")
+
+
 app = rx.App(
     style=styles.BASE,
     stylesheets=styles.STYLESHEETS,
@@ -137,3 +152,8 @@ app = rx.App(
 )
 app.add_page(index, route="/", title="EvalForge", on_load=Panel.refresh)
 app.add_page(trace_explorer, route="/traces", title="EvalForge · traces", on_load=Panel.refresh)
+app.add_page(
+    experiment_list, route="/experiments", title="EvalForge · experiments", on_load=Panel.refresh
+)
+app.add_page(dataset_list, route="/datasets", title="EvalForge · datasets", on_load=Panel.refresh)
+app.add_page(audit_list, route="/audits", title="EvalForge · audits", on_load=Panel.refresh)

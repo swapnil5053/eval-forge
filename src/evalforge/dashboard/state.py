@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 import reflex as rx
 
+from ..eval import faithfulness_audit
 from ..storage import queries
 from ..storage.duckdb_store import DatabaseLocked
 from . import data
@@ -38,10 +39,35 @@ class Panel(rx.State):
 
     expanded_trace: str = ""
     spans: List[Dict[str, Any]] = []
+    experiments: List[Dict[str, Any]] = []
+    experiment_name: str = ""
+    experiment_means: List[Dict[str, str]] = []
+    experiment_metrics: List[str] = []
+    experiment_items: List[Dict[str, Any]] = []
+    compare_with: str = ""
+    comparison: List[Dict[str, Any]] = []
+
+    datasets: List[Dict[str, str]] = []
+    dataset_name: str = ""
+    dataset_items: List[Dict[str, str]] = []
+
+    audits: List[Dict[str, Any]] = []
+    audit_id: str = ""
+    audit: Dict[str, str] = {}
+    audit_claims: List[Dict[str, Any]] = []
+
     expanded_span: str = ""
     input_parts: List[Dict[str, str]] = []
     output_parts: List[Dict[str, str]] = []
     attribution: List[Dict[str, str]] = []
+
+    @rx.var
+    def experiment_choices(self) -> List[str]:
+        return [row["name"] for row in self.experiments]
+
+    @rx.var
+    def comparing(self) -> bool:
+        return bool(self.compare_with) and self.compare_with != self.experiment_name
 
     @rx.var
     def page_label(self) -> str:
@@ -90,6 +116,26 @@ class Panel(rx.State):
         if self.has_previous:
             self.page -= 1
             self.refresh()
+
+    def open_experiment(self, name: str) -> None:
+        self.experiment_name = "" if self.experiment_name == name else name
+        self.compare_with = ""
+        self.comparison = []
+        self.refresh()
+
+    def set_compare_with(self, name: str) -> None:
+        self.compare_with = name
+        self.refresh()
+
+    def open_dataset(self, name: str) -> None:
+        self.dataset_name = "" if self.dataset_name == name else name
+        self.refresh()
+
+    def open_audit(self, audit_id: str) -> None:
+        self.audit_id = "" if self.audit_id == audit_id else audit_id
+        self.audit = {}
+        self.audit_claims = []
+        self.refresh()
 
     def toggle_trace(self, trace_id: str) -> None:
         self.expanded_span = ""
@@ -145,4 +191,54 @@ class Panel(rx.State):
             self.input_parts = data.json_parts(opened["input"]) if opened else []
             self.output_parts = data.json_parts(opened["output"]) if opened else []
 
+        self._load_experiments(store)
+        self._load_datasets(store)
+        self._load_audits(store)
         self.footer = data.footer(store)
+
+    def _load_experiments(self, store) -> None:
+        rows = queries.experiments(store)
+        self.experiments = data.experiment_rows(rows)
+        if not self.experiment_name:
+            self.experiment_means = []
+            self.experiment_metrics = []
+            self.experiment_items = []
+            self.comparison = []
+            return
+
+        opened = queries.experiment(store, self.experiment_name)
+        self.experiment_means = data.metric_means(opened)
+        self.experiment_metrics = opened.metrics if opened else []
+        self.experiment_items = data.experiment_item_rows(
+            queries.experiment_items(store, self.experiment_name),
+            self.experiment_metrics,
+            opened.polarity if opened else {},
+        )
+        self.comparison = (
+            data.comparison_rows(
+                queries.compare_experiments(store, self.experiment_name, self.compare_with),
+                self.experiment_name,
+                self.compare_with,
+            )
+            if self.comparing
+            else []
+        )
+
+    def _load_datasets(self, store) -> None:
+        self.datasets = data.dataset_rows(queries.datasets(store))
+        self.dataset_items = (
+            data.dataset_item_rows(queries.dataset_items(store, self.dataset_name))
+            if self.dataset_name
+            else []
+        )
+
+    def _load_audits(self, store) -> None:
+        self.audits = data.audit_rows(faithfulness_audit.recent(store, limit=50))
+        if not self.audit_id:
+            return
+        found = faithfulness_audit.load(store, self.audit_id)
+        if found is None:
+            self.audit_id = ""
+            return
+        self.audit = data.audit_header(found)
+        self.audit_claims = data.audit_claim_rows(found)

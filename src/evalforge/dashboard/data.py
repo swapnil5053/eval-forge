@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from ..storage import queries
 from ..storage.duckdb_store import Store, default_db_path
+from . import styles
 
 LOGGER = logging.getLogger(__name__)
 
@@ -127,9 +128,11 @@ def span_tree(spans: List[queries.SpanRow]) -> List[Dict[str, Any]]:
     roots = [span for span in spans if span.parent_span_id not in known]
     rows: List[Dict[str, Any]] = []
 
+    window = _trace_window(spans)
+
     def walk(span: queries.SpanRow, prefix: str, last: bool, depth: int) -> None:
         branch = "" if depth == 0 else f"{prefix}{'└─ ' if last else '├─ '}"
-        rows.append(_span_row(span, branch))
+        rows.append(_span_row(span, branch, window))
         kids = children.get(span.id, [])
         extension = "" if depth == 0 else prefix + ("   " if last else "│  ")
         for index, child in enumerate(kids):
@@ -140,11 +143,38 @@ def span_tree(spans: List[queries.SpanRow]) -> List[Dict[str, Any]]:
     return rows
 
 
-def _span_row(span: queries.SpanRow, branch: str) -> Dict[str, Any]:
+def _trace_window(spans: List[queries.SpanRow]) -> tuple:
+    """(start, total_ms) for the trace, so each span can be placed on a shared axis."""
+    starts = [span.start_time for span in spans if span.start_time is not None]
+    if not starts:
+        return None, 0.0
+    start = min(starts)
+    end_ms = max(
+        (span.start_time - start).total_seconds() * 1000 + (span.latency_ms or 0.0)
+        for span in spans
+        if span.start_time is not None
+    )
+    return start, end_ms
+
+
+def _offset_and_width(span: queries.SpanRow, window: tuple) -> tuple:
+    start, total = window
+    if start is None or not total or span.start_time is None:
+        return "0%", "0%"
+    offset = (span.start_time - start).total_seconds() * 1000
+    width = max(span.latency_ms or 0.0, total * 0.004)
+    return f"{offset / total * 100:.2f}%", f"{min(width, total - offset) / total * 100:.2f}%"
+
+
+def _span_row(span: queries.SpanRow, branch: str, window: tuple = (None, 0.0)) -> Dict[str, Any]:
     tokens = ""
     if span.prompt_tokens or span.completion_tokens:
         tokens = f"{span.prompt_tokens or 0}/{span.completion_tokens or 0} tok"
+    offset, width = _offset_and_width(span, window)
     return {
+        "offset": offset,
+        "width": width,
+        "bar_colour": _span_colour(span),
         "id": span.id,
         "branch": branch,
         "name": span.name,
@@ -162,6 +192,15 @@ def _span_row(span: queries.SpanRow, branch: str) -> Dict[str, Any]:
         "error": (span.error or "").strip(),
         "has_error": bool(span.error),
     }
+
+
+def _span_colour(span: queries.SpanRow) -> str:
+    """The LLM span carries the accent; an error carries red; everything else is dim."""
+    if span.status == "error":
+        return styles.ERROR
+    if span.type == "llm":
+        return styles.ACCENT
+    return styles.BORDER_BRIGHT
 
 
 def attribution_row(store: Store, span_id: str) -> List[Dict[str, str]]:
@@ -255,3 +294,175 @@ def compact_json(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, default=str)
+
+
+def experiment_rows(rows: List[queries.ExperimentRow]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": row.name,
+            "dataset": row.dataset_name,
+            "items": str(row.items),
+            "errors": str(row.errors) if row.errors else "",
+            "metrics": ", ".join(row.metrics) or EMPTY,
+            "at": clock(row.created_at),
+            "summary": " · ".join(
+                f"{metric} {row.means[metric]:.2f}" for metric in row.metrics
+            ) or EMPTY,
+        }
+        for row in rows
+    ]
+
+
+def metric_means(row: Optional[queries.ExperimentRow]) -> List[Dict[str, str]]:
+    if row is None:
+        return []
+    return [
+        {
+            "metric": metric,
+            "mean": f"{row.means[metric]:.3f}",
+            "colour": styles.score_colour(row.means[metric], row.polarity.get(metric, True)),
+            "direction": "higher is better" if row.polarity.get(metric, True) else "lower is better",
+        }
+        for metric in row.metrics
+    ]
+
+
+def experiment_item_rows(
+    rows: List[queries.ExperimentItemRow], metrics: List[str], polarity: Dict[str, bool]
+) -> List[Dict[str, Any]]:
+    """One row per dataset item, with a cell per metric in a stable column order."""
+    return [
+        {
+            "id": row.dataset_item_id[:8],
+            "trace_id": (row.trace_id or "")[:8],
+            "input": truncate(compact_json(row.input), 60) or EMPTY,
+            "output": truncate(compact_json(row.output), 60) or EMPTY,
+            "latency": milliseconds(row.latency_ms),
+            "error": row.error or "",
+            "has_error": bool(row.error),
+            "cells": [_score_cell(row.scores.get(metric), polarity.get(metric, True))
+                      for metric in metrics],
+        }
+        for row in rows
+    ]
+
+
+def _score_cell(score: Any, higher_is_better: bool) -> Dict[str, str]:
+    if not isinstance(score, dict):
+        return {"text": EMPTY, "colour": styles.TEXT_FAINT, "reason": ""}
+    if "error" in score:
+        return {"text": "err", "colour": styles.ERROR, "reason": str(score["error"])}
+    value = float(score.get("value", 0.0))
+    return {
+        "text": f"{value:.2f}",
+        "colour": styles.score_colour(value, score.get("higher_is_better", higher_is_better)),
+        "reason": str(score.get("reason") or ""),
+    }
+
+
+def comparison_rows(rows: List[dict], left: str, right: str) -> List[Dict[str, Any]]:
+    """Flatten a two-experiment comparison into one row per item and metric.
+
+    The delta is the opened experiment minus the baseline it is being compared
+    against, so a positive number means the run you opened moved that way - and the
+    colour then reads it through the metric's own polarity.
+    """
+    flattened = []
+    for row in rows:
+        for metric, sides in sorted(row["metrics"].items()):
+            opened, baseline = sides["left"], sides["right"]
+            delta = None if opened is None or baseline is None else opened - baseline
+            better = sides["higher_is_better"]
+            flattened.append(
+                {
+                    "id": row["dataset_item_id"][:8],
+                    "input": truncate(compact_json(row["input"]), 50) or EMPTY,
+                    "metric": metric,
+                    "left": EMPTY if opened is None else f"{opened:.2f}",
+                    "right": EMPTY if baseline is None else f"{baseline:.2f}",
+                    "delta": EMPTY if delta is None else f"{delta:+.2f}",
+                    "colour": _delta_colour(delta, better),
+                }
+            )
+    return flattened
+
+
+def _delta_colour(delta: Optional[float], higher_is_better: bool) -> str:
+    if delta is None or abs(delta) < 0.005:
+        return styles.TEXT_DIM
+    improved = delta > 0 if higher_is_better else delta < 0
+    return styles.OK if improved else styles.ERROR
+
+
+def dataset_rows(rows: List[queries.DatasetRow]) -> List[Dict[str, str]]:
+    return [
+        {
+            "name": row.name,
+            "description": row.description or EMPTY,
+            "items": str(row.items),
+            "at": clock(row.created_at),
+        }
+        for row in rows
+    ]
+
+
+def dataset_item_rows(rows: List[dict]) -> List[Dict[str, str]]:
+    return [
+        {
+            "id": row["id"][:8],
+            "input": truncate(compact_json(row["input"]), 90) or EMPTY,
+            "expected": truncate(compact_json(row["expected_output"]), 50) or EMPTY,
+        }
+        for row in rows
+    ]
+
+
+def audit_rows(rows: List[dict]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "id": row["id"],
+            "short_id": row["id"][:8],
+            "trace_id": (row["trace_id"] or "")[:8],
+            "query": truncate(row["query"] or "", 60) or EMPTY,
+            "score": f"{row['score']:.2f}",
+            "colour": styles.score_colour(row["score"]),
+            "claims": str(row["claim_count"]),
+            "unsupported": str(row["unsupported"]),
+            "contradicted": str(row["contradicted"]),
+            "at": clock(row["created_at"]),
+        }
+        for row in rows
+    ]
+
+
+def audit_claim_rows(audit: Any) -> List[Dict[str, Any]]:
+    """Claims worst-first, each carrying its verdict colour and the evidence text."""
+    ordered = sorted(audit.claims, key=lambda claim: claim.severity, reverse=True)
+    return [
+        {
+            "claim": claim.claim,
+            "verdict": claim.verdict,
+            "colour": styles.VERDICT_COLOURS.get(claim.verdict, styles.TEXT_DIM),
+            "rationale": claim.rationale or "",
+            "evidence": " ".join(
+                f"[{index}] {audit.context[index]}"
+                for index in claim.evidence
+                if 0 <= index < len(audit.context)
+            ),
+        }
+        for claim in ordered
+    ]
+
+
+def audit_header(audit: Any) -> Dict[str, str]:
+    return {
+        "id": audit.id,
+        "short_id": audit.id[:8],
+        "trace_id": (audit.trace_id or "")[:8],
+        "query": audit.query or EMPTY,
+        "answer": audit.answer or EMPTY,
+        "score": f"{audit.score:.2f}",
+        "colour": styles.score_colour(audit.score),
+        "claims": str(len(audit.claims)),
+        "model": audit.model,
+    }

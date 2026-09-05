@@ -156,6 +156,34 @@ JSON_COLOURS = {
 }
 
 
+def waterfall_track(span: Any) -> rx.Component:
+    """Where this span sat inside its trace, on an axis shared by every sibling."""
+    return rx.el.span(
+        rx.el.span(
+            style={
+                "position": "absolute",
+                "top": "0",
+                "bottom": "0",
+                "left": span["offset"],
+                "width": span["width"],
+                "min_width": "2px",
+                "border_radius": "1px",
+                "background": span["bar_colour"],
+            }
+        ),
+        style={
+            "position": "relative",
+            "display": "inline-block",
+            "vertical_align": "middle",
+            "height": "5px",
+            "width": "180px",
+            "margin_left": styles.SPACE_4,
+            "background": styles.BACKGROUND,
+            "border_radius": "1px",
+        },
+    )
+
+
 def json_block(parts: Any) -> rx.Component:
     """A JSON viewer built from coloured runs - no highlighting library."""
     return rx.el.pre(

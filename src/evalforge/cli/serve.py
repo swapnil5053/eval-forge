@@ -39,6 +39,34 @@ __all__ = ["app"]
 """
 
 
+@click.group("mcp")
+def mcp_group() -> None:
+    """Expose the trace store over the Model Context Protocol."""
+
+
+@mcp_group.command("serve")
+def mcp_serve() -> None:
+    """Run the MCP server on stdio, for Claude, Cursor or any MCP client."""
+    from ..mcp.server import StoreUnavailable, serve as run_server
+
+    try:
+        run_server()
+    except (ImportError, StoreUnavailable) as error:
+        raise click.ClickException(str(error)) from error
+
+
+@mcp_group.command("install")
+def mcp_install() -> None:
+    """Print the client config block that registers this server."""
+    console.print_json(
+        data={
+            "mcpServers": {
+                "evalforge": {"command": "evalforge", "args": ["mcp", "serve"]}
+            }
+        }
+    )
+
+
 @click.command()
 @click.option("--port", default=8000, show_default=True, help="Port to serve on.")
 @click.option("--no-browser", is_flag=True, help="Do not open a browser window.")

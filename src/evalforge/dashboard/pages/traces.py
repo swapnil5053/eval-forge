@@ -132,6 +132,7 @@ def _span_node(span: rx.Var) -> rx.Component:
                     style={"color": styles.TEXT_FAINT, "margin_left": styles.SPACE_3},
                 ),
             ),
+            ui.waterfall_track(span),
             on_click=Panel.toggle_span(span["id"]),
             style={
                 "font_family": styles.MONO,

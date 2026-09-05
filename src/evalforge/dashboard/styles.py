@@ -20,11 +20,13 @@ TEXT_FAINT = "hsl(0, 0%, 36%)"
 
 # One accent, used only for the active nav item, the primary chart series, bars, and
 # interactive affordances on hover. Status colours are not the accent.
-ACCENT = "hsl(38, 90%, 55%)"
-ACCENT_MUTED = "hsl(38, 55%, 34%)"
+# Matches the accent on the landing page in docs/, so the product reads as one thing.
+ACCENT = "#A8C97F"
+ACCENT_MUTED = "#5F7549"
 
-OK = "hsl(150, 45%, 48%)"
-ERROR = "hsl(2, 70%, 58%)"
+OK = "#A8C97F"
+WARN = "#C9A961"
+ERROR = "#C97A5A"
 
 # Chart series, dimmest first: p50 is background information, p99 is the alarm.
 SERIES = (TEXT_FAINT, TEXT_DIM, ACCENT)
@@ -155,5 +157,22 @@ BASE = {
 }
 
 
+# Claim verdicts, worst last: the audit view colours by severity, not by score.
+VERDICT_COLOURS = {
+    "SUPPORTED": OK,
+    "PARTIALLY_SUPPORTED": WARN,
+    "UNSUPPORTED": ERROR,
+    "CONTRADICTED": "#E0603C",
+}
+
+
 def status_colour(status: str) -> str:
     return ERROR if status == "error" else OK
+
+
+def score_colour(value: float, higher_is_better: bool = True) -> str:
+    """Green when the score points the good way, amber mid, red when it does not."""
+    good = value if higher_is_better else 1.0 - value
+    if good >= 0.8:
+        return OK
+    return WARN if good >= 0.5 else ERROR

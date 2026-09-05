@@ -8,7 +8,7 @@ numbers without any of them writing SQL.
 import dataclasses
 import datetime
 import json
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .duckdb_store import Store
 
@@ -485,3 +485,236 @@ def _load_json(value: Optional[str]) -> Any:
         return json.loads(value)
     except (TypeError, json.JSONDecodeError):
         return value
+
+
+@dataclasses.dataclass
+class ExperimentRow:
+    id: str
+    name: str
+    dataset_name: str
+    items: int
+    errors: int
+    created_at: Optional[datetime.datetime]
+    means: Dict[str, float] = dataclasses.field(default_factory=dict)
+    polarity: Dict[str, bool] = dataclasses.field(default_factory=dict)
+
+    @property
+    def metrics(self) -> List[str]:
+        return sorted(self.means)
+
+
+@dataclasses.dataclass
+class ExperimentItemRow:
+    dataset_item_id: str
+    trace_id: Optional[str]
+    input: Any
+    output: Any
+    latency_ms: Optional[float]
+    error: Optional[str]
+    scores: Dict[str, dict] = dataclasses.field(default_factory=dict)
+
+
+@dataclasses.dataclass
+class DatasetRow:
+    id: str
+    name: str
+    description: Optional[str]
+    items: int
+    created_at: Optional[datetime.datetime]
+
+
+def experiments(store: Store, limit: int = 50) -> List[ExperimentRow]:
+    """Every experiment with its per-metric means, newest first."""
+    rows = store.db.execute(
+        """
+        SELECT e.id, e.name, coalesce(d.name, '(ad-hoc)'), epoch_ms(e.created_at)
+        FROM experiments e
+        LEFT JOIN datasets d ON d.id = e.dataset_id
+        ORDER BY 4 DESC
+        LIMIT ?
+        """,
+        [limit],
+    ).fetchall()
+
+    return [
+        _summarise_experiment(store, identifier, name, dataset_name, moment(created_ms))
+        for identifier, name, dataset_name, created_ms in rows
+    ]
+
+
+def experiment(store: Store, name: str) -> Optional[ExperimentRow]:
+    row = store.db.execute(
+        """
+        SELECT e.id, e.name, coalesce(d.name, '(ad-hoc)'), epoch_ms(e.created_at)
+        FROM experiments e
+        LEFT JOIN datasets d ON d.id = e.dataset_id
+        WHERE e.name = ?
+        """,
+        [name],
+    ).fetchone()
+    if row is None:
+        return None
+    return _summarise_experiment(store, row[0], row[1], row[2], moment(row[3]))
+
+
+def experiment_items(store: Store, name: str) -> List[ExperimentItemRow]:
+    """Per-item results for one experiment, including the dataset input."""
+    rows = store.db.execute(
+        """
+        SELECT r.dataset_item_id, r.trace_id, i.input, r.output, r.scores,
+               r.latency_ms, r.error
+        FROM experiments e
+        JOIN experiment_results r ON r.experiment_id = e.id
+        LEFT JOIN dataset_items i ON i.id = r.dataset_item_id
+        WHERE e.name = ?
+        ORDER BY r.dataset_item_id
+        """,
+        [name],
+    ).fetchall()
+
+    return [
+        ExperimentItemRow(
+            dataset_item_id=item_id,
+            trace_id=trace_id,
+            input=_load_json(raw_input),
+            output=_load_json(output),
+            latency_ms=latency,
+            error=error,
+            scores=_load_json(scores) or {},
+        )
+        for item_id, trace_id, raw_input, output, scores, latency, error in rows
+    ]
+
+
+def compare_experiments(store: Store, left: str, right: str) -> List[dict]:
+    """Line up two experiments by dataset item and difference every shared metric."""
+    by_item: Dict[str, dict] = {}
+    for side, name in (("left", left), ("right", right)):
+        for item in experiment_items(store, name):
+            entry = by_item.setdefault(
+                item.dataset_item_id, {"dataset_item_id": item.dataset_item_id, "input": item.input}
+            )
+            entry[side] = item
+
+    rows = []
+    for entry in by_item.values():
+        left_item, right_item = entry.get("left"), entry.get("right")
+        metrics = sorted(
+            set(_numeric_scores(left_item)) | set(_numeric_scores(right_item))
+        )
+        rows.append(
+            {
+                "dataset_item_id": entry["dataset_item_id"],
+                "input": entry["input"],
+                "metrics": {
+                    metric: {
+                        "left": _numeric_scores(left_item).get(metric),
+                        "right": _numeric_scores(right_item).get(metric),
+                        "higher_is_better": _polarity_of(left_item, right_item, metric),
+                    }
+                    for metric in metrics
+                },
+            }
+        )
+    return sorted(rows, key=lambda row: row["dataset_item_id"])
+
+
+def datasets(store: Store) -> List[DatasetRow]:
+    rows = store.db.execute(
+        """
+        SELECT d.id, d.name, d.description, count(i.id), epoch_ms(d.created_at)
+        FROM datasets d
+        LEFT JOIN dataset_items i ON i.dataset_id = d.id
+        GROUP BY ALL
+        ORDER BY 5 DESC
+        """
+    ).fetchall()
+    return [
+        DatasetRow(
+            id=identifier,
+            name=name,
+            description=description,
+            items=items,
+            created_at=moment(created_ms),
+        )
+        for identifier, name, description, items, created_ms in rows
+    ]
+
+
+def dataset_items(store: Store, name: str, limit: int = 200) -> List[dict]:
+    rows = store.db.execute(
+        """
+        SELECT i.id, i.input, i.expected_output, i.metadata
+        FROM datasets d JOIN dataset_items i ON i.dataset_id = d.id
+        WHERE d.name = ?
+        ORDER BY i.id
+        LIMIT ?
+        """,
+        [name, limit],
+    ).fetchall()
+    return [
+        {
+            "id": identifier,
+            "input": _load_json(raw_input),
+            "expected_output": _load_json(expected),
+            "metadata": _load_json(metadata) or {},
+        }
+        for identifier, raw_input, expected, metadata in rows
+    ]
+
+
+def _summarise_experiment(
+    store: Store,
+    identifier: str,
+    name: str,
+    dataset_name: str,
+    created_at: Optional[datetime.datetime],
+) -> ExperimentRow:
+    rows = store.db.execute(
+        "SELECT scores, error FROM experiment_results WHERE experiment_id = ?", [identifier]
+    ).fetchall()
+
+    totals: Dict[str, List[float]] = {}
+    polarity: Dict[str, bool] = {}
+    errors = 0
+    for scores, error in rows:
+        if error:
+            errors += 1
+        for metric, score in (_load_json(scores) or {}).items():
+            if not isinstance(score, dict) or "value" not in score:
+                continue
+            totals.setdefault(metric, []).append(float(score["value"]))
+            polarity[metric] = bool(score.get("higher_is_better", True))
+
+    return ExperimentRow(
+        id=identifier,
+        name=name,
+        dataset_name=dataset_name,
+        items=len(rows),
+        errors=errors,
+        created_at=created_at,
+        means={metric: sum(values) / len(values) for metric, values in totals.items()},
+        polarity=polarity,
+    )
+
+
+def _numeric_scores(item: Optional[ExperimentItemRow]) -> Dict[str, float]:
+    if item is None:
+        return {}
+    return {
+        metric: float(score["value"])
+        for metric, score in item.scores.items()
+        if isinstance(score, dict) and "value" in score
+    }
+
+
+def _polarity_of(
+    left: Optional[ExperimentItemRow], right: Optional[ExperimentItemRow], metric: str
+) -> bool:
+    for item in (left, right):
+        if item is None:
+            continue
+        score = item.scores.get(metric)
+        if isinstance(score, dict) and "higher_is_better" in score:
+            return bool(score["higher_is_better"])
+    return True

@@ -1,12 +1,15 @@
 services:
   evalforge:
     build: .
+    image: evalforge:local
     ports:
       - "8000:8000"
     volumes:
+      # Your traces live here. Mount a host path to keep them across containers.
       - evalforge-data:/data
     environment:
       EVALFORGE_HOME: /data
+    restart: unless-stopped
 
 volumes:
   evalforge-data:

@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from evalforge.dashboard import data
+from evalforge.dashboard import data, styles
 from evalforge.storage import queries
 from evalforge.storage.duckdb_store import Store
 
@@ -174,3 +174,97 @@ def test_summary_formats_and_flags_a_high_error_rate(tmp_path):
     assert summary["traces"] == "2"
     assert summary["error_rate"] == "50.0"
     assert summary["error_rate_high"] is True
+
+
+def comparison_input(left_value, right_value, higher_is_better=True):
+    return [
+        {
+            "dataset_item_id": "item0",
+            "input": {"question": "q"},
+            "metrics": {
+                "faithfulness": {
+                    "left": left_value,
+                    "right": right_value,
+                    "higher_is_better": higher_is_better,
+                }
+            },
+        }
+    ]
+
+
+def test_delta_is_the_opened_run_minus_its_baseline():
+    row = data.comparison_rows(comparison_input(0.84, 0.45), "v2", "v1")[0]
+
+    assert row["left"] == "0.84"
+    assert row["right"] == "0.45"
+    assert row["delta"] == "+0.39"
+    assert row["colour"] == styles.OK
+
+
+def test_a_regression_on_a_higher_is_better_metric_reads_red():
+    row = data.comparison_rows(comparison_input(0.40, 0.80), "v2", "v1")[0]
+    assert row["delta"] == "-0.40"
+    assert row["colour"] == styles.ERROR
+
+
+def test_polarity_flips_which_direction_is_good():
+    improved = data.comparison_rows(comparison_input(0.18, 0.55, False), "v2", "v1")[0]
+    worsened = data.comparison_rows(comparison_input(0.55, 0.18, False), "v2", "v1")[0]
+
+    assert improved["delta"] == "-0.37"
+    assert improved["colour"] == styles.OK
+    assert worsened["colour"] == styles.ERROR
+
+
+def test_a_missing_side_has_no_delta():
+    row = data.comparison_rows(comparison_input(0.5, None), "v2", "v1")[0]
+    assert row["right"] == data.EMPTY
+    assert row["delta"] == data.EMPTY
+    assert row["colour"] == styles.TEXT_DIM
+
+
+def test_an_unchanged_score_is_neutral():
+    row = data.comparison_rows(comparison_input(0.5, 0.5), "v2", "v1")[0]
+    assert row["colour"] == styles.TEXT_DIM
+
+
+def test_experiment_rows_summarise_their_means():
+    row = queries.ExperimentRow(
+        id="e1", name="v1", dataset_name="capitals", items=2, errors=1,
+        created_at=BASE, means={"faithfulness": 0.75, "hallucination": 0.2},
+        polarity={"faithfulness": True, "hallucination": False},
+    )
+    formatted = data.experiment_rows([row])[0]
+
+    assert formatted["summary"] == "faithfulness 0.75 · hallucination 0.20"
+    assert formatted["errors"] == "1"
+
+    means = data.metric_means(row)
+    assert [entry["direction"] for entry in means] == ["higher is better", "lower is better"]
+    assert means[0]["colour"] == styles.WARN
+    assert means[1]["colour"] == styles.OK
+
+
+def test_waterfall_places_spans_on_a_shared_axis():
+    start = BASE
+    rows = data.span_tree(
+        [
+            span("root", None, "rag", start_time=start, latency_ms=1000.0),
+            span("a", "root", "retrieve", start_time=start, latency_ms=250.0),
+            span(
+                "b", "root", "generate", "llm",
+                start_time=start + datetime.timedelta(milliseconds=250), latency_ms=750.0,
+            ),
+        ]
+    )
+
+    assert rows[0]["offset"] == "0.00%"
+    assert rows[0]["width"] == "100.00%"
+    assert rows[1]["width"] == "25.00%"
+    assert rows[2]["offset"] == "25.00%"
+    assert rows[2]["bar_colour"] == styles.ACCENT
+
+
+def test_an_errored_span_bar_is_red():
+    rows = data.span_tree([span("s1", None, "boom", status="error", latency_ms=5.0)])
+    assert rows[0]["bar_colour"] == styles.ERROR
