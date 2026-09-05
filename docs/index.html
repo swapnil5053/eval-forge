@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EvalForge — evals that fail loudly</title>
+<meta name="description" content="Trace, evaluate and audit LLM applications on your own machine. One pip install, an embedded DuckDB file, no server and no account.">
+<meta property="og:title" content="EvalForge — evals that fail loudly">
+<meta property="og:description" content="Trace, evaluate and audit LLM applications on your own machine. One pip install, no server.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#0A0B0A">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230A0B0A'/><rect x='6' y='14' width='20' height='4' fill='%23A8C97F'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0B0A;
+    --panel: #121312;
+    --panel-2: #111211;
+    --panel-3: #101110;
+    --band: #0D0E0D;
+    --text: #EDEFEC;
+    --text-2: #D6DAD3;
+    --text-3: #AEB5AB;
+    --text-4: #A2A99F;
+    --text-5: #828981;
+    --text-6: #767D74;
+    --text-7: #454B44;
+    --line: rgba(255, 255, 255, 0.05);
+    --line-2: rgba(255, 255, 255, 0.07);
+    --line-3: rgba(255, 255, 255, 0.09);
+    /* One accent. Swap this and the whole page retunes. */
+    --accent: #A8C97F;
+    --accent-bright: #BCDC92;
+    --warm: #C9A961;
+    --red: #C97A5A;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --ease: cubic-bezier(.2, .7, .2, 1);
+    --shell: 1320px;
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--bg); scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: var(--text); text-decoration: none; }
+  a:hover { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+  pre, code { font-family: var(--mono); }
+  h1, h2 { font-weight: 600; letter-spacing: -0.03em; margin: 0; }
+  ::selection { background: var(--accent); color: var(--bg); }
+
+  @keyframes ef-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  @keyframes ef-shim { 0% { background-position: -220% 0; } 100% { background-position: 220% 0; } }
+  @keyframes ef-sweep { 0% { background-position: 200% 200%; } 100% { background-position: 0% 0%; } }
+
+  /* ---------- backdrop ---------- */
+  .backdrop { position: fixed; inset: -80px; z-index: 0; pointer-events: none; overflow: hidden; }
+  .backdrop__mask {
+    position: absolute; inset: 0;
+    -webkit-mask-image: radial-gradient(ellipse 100% 82% at 50% 24%, #000 0%, rgba(0,0,0,.5) 58%, transparent 92%);
+    mask-image: radial-gradient(ellipse 100% 82% at 50% 24%, #000 0%, rgba(0,0,0,.5) 58%, transparent 92%);
+  }
+  .backdrop__wash { position: absolute; inset: 0; background: rgba(255,255,255,0.026); }
+  .backdrop__sweep, .backdrop__sweep-2 { position: absolute; inset: -40% -20%; background-size: 300% 300%; }
+  .backdrop__sweep {
+    background: repeating-linear-gradient(115deg,
+      rgba(168,201,127,0) 0%, rgba(168,201,127,0) 6.5%, rgba(168,201,127,.1) 9.2%,
+      rgba(143,182,168,.17) 10%, rgba(168,201,127,.1) 10.8%, rgba(168,201,127,0) 13.5%,
+      rgba(168,201,127,0) 20%);
+    animation: ef-sweep 42s linear infinite;
+  }
+  .backdrop__sweep-2 {
+    background: repeating-linear-gradient(115deg,
+      rgba(143,182,168,0) 0%, rgba(143,182,168,0) 11%, rgba(143,182,168,.075) 16%,
+      rgba(143,182,168,0) 21%, rgba(143,182,168,0) 33%);
+    animation: ef-sweep 67s linear infinite reverse;
+  }
+  .backdrop__grid {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(var(--bg) 2px, transparent 2px), linear-gradient(90deg, var(--bg) 2px, transparent 2px);
+    background-size: 74px 74px;
+  }
+
+  .progress { position: fixed; top: 0; left: 0; height: 1.5px; width: 0; background: var(--accent); z-index: 60; opacity: .85; }
+  .page { position: relative; background: var(--bg); overflow-x: hidden; }
+  .shell { max-width: var(--shell); margin: 0 auto; padding-inline: 28px; }
+
+  /* ---------- pills ---------- */
+  .pill {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 9px 16px; border-radius: 999px;
+    border: 1px solid var(--line-2); background: var(--panel);
+    color: var(--text-3); font-family: var(--mono); font-size: 12.5px;
+  }
+  .pill--link { border-color: var(--line-3); transition: border-color 220ms ease, background 220ms ease, color 220ms ease; }
+  .pill--link:hover { border-color: rgba(168,201,127,.45); background: rgba(168,201,127,.07); color: var(--text); }
+
+  /* ---------- header ---------- */
+  .header {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    background: #0A0B0AF7;
+    border-bottom: 1px solid var(--line);
+  }
+  .header__inner { display: flex; align-items: center; gap: 16px; padding-block: 14px; }
+  .wordmark {
+    display: flex; align-items: baseline; gap: 1px; flex: 1 1 auto;
+    font-family: var(--mono); font-size: 15px; letter-spacing: -0.01em; font-weight: 500;
+  }
+  .wordmark:hover { color: var(--text); }
+  .wordmark__dim { color: var(--text-4); }
+  .caret {
+    width: 8px; height: 2px; background: var(--accent);
+    margin-left: 3px; align-self: flex-end; margin-bottom: 2px;
+    animation: ef-blink 1.4s steps(1) infinite;
+  }
+  .header__actions { display: flex; align-items: center; gap: 10px; }
+  .header__prompt { color: var(--text-5); }
+
+  /* ---------- hero ---------- */
+  .hero { position: relative; max-width: var(--shell); margin: 0 auto; padding: clamp(52px, 7vw, 96px) 0 clamp(76px, 9vw, 120px); }
+  .hero__glow {
+    position: absolute; top: 6%; left: 44%;
+    width: 52vw; height: 52vw; max-width: 760px; max-height: 760px;
+    border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, rgba(168,201,127,.055) 0%, rgba(168,201,127,0) 66%);
+  }
+  .hero__grid {
+    position: relative; display: grid; align-items: center;
+    grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
+    gap: clamp(28px, 4vw, 52px);
+  }
+  .hero__copy { padding-inline: 28px; min-width: 0; }
+  .eyebrow {
+    display: inline-flex; align-items: center; margin-bottom: 30px;
+    padding: 7px 15px; border-radius: 999px;
+    border: 1px solid rgba(168,201,127,.22); background: rgba(168,201,127,.05);
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .05em; color: var(--accent);
+  }
+  .hero h1 { font-size: clamp(42px, 6.2vw, 86px); line-height: .94; letter-spacing: -0.035em; max-width: 14ch; text-wrap: balance; }
+  .hero__sub { margin: 28px 0 0; font-size: 18px; line-height: 1.5; color: var(--text-3); max-width: 40ch; }
+  .hero__cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 36px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 13px; padding: 14px 24px; border-radius: 999px;
+  }
+  .btn--solid {
+    background: var(--accent); color: var(--bg); font-weight: 500;
+    transition: transform 240ms var(--ease), box-shadow 240ms ease, background 240ms ease;
+  }
+  .btn--solid:hover { background: var(--accent-bright); color: var(--bg); transform: translateY(-2px); box-shadow: 0 10px 30px -10px rgba(168,201,127,.5); }
+  .btn--ghost {
+    border: 1px solid rgba(255,255,255,.1); background: var(--panel); color: var(--text-3);
+    transition: border-color 240ms ease, color 240ms ease, transform 240ms var(--ease);
+  }
+  .btn--ghost:hover { border-color: rgba(255,255,255,.22); color: var(--text); transform: translateY(-2px); }
+
+  .flow {
+    display: inline-flex; align-items: center; flex-wrap: wrap; gap: 16px; margin-top: 34px;
+    padding: 12px 20px; border-radius: 999px; border: 1px solid rgba(255,255,255,.06);
+    background: #101110; font-family: var(--mono); font-size: 12px; color: var(--text-4);
+  }
+  .flow strong { color: var(--text); font-weight: 400; }
+  .flow em { color: var(--accent); font-style: normal; }
+  .flow span.dot { color: var(--text-6); }
+
+  /* ---------- audit card ---------- */
+  .card-wrap { min-width: 0; }
+  .audit-card {
+    width: min(720px, 116%);
+    border-radius: 18px; border: 1px solid rgba(255,255,255,.08); background: var(--panel);
+    box-shadow: -30px 50px 120px -50px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.045);
+    overflow: hidden; transform: rotate(2.5deg);
+  }
+  .audit-card__head { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,.055); }
+  .audit-card__title { font-family: var(--mono); font-size: 12px; color: var(--text); }
+  .tag { padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.08); font-family: var(--mono); font-size: 10.5px; color: var(--text-4); }
+  .audit-card__score { margin-left: auto; display: flex; align-items: baseline; gap: 7px; }
+  .audit-card__score b { font-family: var(--mono); font-size: 20px; font-weight: 500; letter-spacing: -0.02em; }
+  .audit-card__delta { font-family: var(--mono); font-size: 11px; color: var(--red); }
+  .audit-card__cols {
+    display: flex; gap: 22px; padding: 11px 20px;
+    border-bottom: 1px solid rgba(255,255,255,.045);
+    font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--text-6);
+  }
+  .col-claim { flex: 1; min-width: 0; }
+  .col-verdict { flex: 0 0 96px; }
+  .col-score { flex: 0 0 42px; text-align: right; }
+  .claim-row {
+    display: flex; gap: 22px; align-items: center;
+    padding: 14px 20px 14px 18px;
+    border-bottom: 1px solid rgba(255,255,255,.035);
+    border-left: 2px solid transparent;
+    transition: background 260ms var(--ease);
+  }
+  .claim-row:hover { background: rgba(255,255,255,.028); }
+  .claim-row__text {
+    flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.45; color: var(--text-2);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .verdict {
+    display: inline-block; padding: 3px 9px; border-radius: 999px; border: 1px solid;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .06em;
+  }
+  .skeleton-row {
+    display: flex; gap: 22px; align-items: center;
+    padding: 15px 20px 15px 18px;
+    border-bottom: 1px solid rgba(255,255,255,.035);
+    border-left: 2px solid rgba(255,255,255,.07);
+  }
+  .shimmer {
+    height: 9px; border-radius: 999px;
+    background: linear-gradient(90deg, rgba(255,255,255,.045) 20%, rgba(255,255,255,.11) 50%, rgba(255,255,255,.045) 80%);
+    background-size: 220% 100%; animation: ef-shim 1.5s linear infinite;
+  }
+  .audit-card__foot {
+    display: flex; justify-content: space-between; padding: 13px 20px;
+    font-family: var(--mono); font-size: 11px; color: var(--text-6);
+  }
+
+  /* ---------- code section ---------- */
+  .code-section { position: relative; max-width: var(--shell); margin: 0 auto; padding: 0 28px clamp(80px, 9vw, 124px); }
+  .code-grid { display: grid; grid-template-columns: minmax(0, 40fr) minmax(0, 60fr); gap: clamp(32px, 5vw, 76px); align-items: center; }
+  .code-grid h2 { font-size: clamp(26px, 3vw, 38px); line-height: 1.08; max-width: 18ch; }
+  .props { display: flex; flex-direction: column; gap: 2px; margin-top: 32px; }
+  .prop {
+    display: flex; gap: 14px; align-items: baseline;
+    padding: 13px 16px; border-radius: 12px;
+    font-size: 15.5px; line-height: 1.5; color: var(--text-3);
+    transition: background 260ms var(--ease), color 260ms ease, transform 260ms var(--ease);
+  }
+  .prop:hover { background: rgba(255,255,255,.035); color: var(--text); transform: translateX(4px); }
+  .prop__dash { color: var(--accent); font-family: var(--mono); flex: 0 0 auto; }
+  .editor {
+    border-radius: 18px; border: 1px solid rgba(255,255,255,.075); background: var(--panel-2);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04); min-width: 0; overflow: hidden;
+  }
+  .editor__bar {
+    display: flex; align-items: center; gap: 12px; padding: 13px 22px;
+    border-bottom: 1px solid rgba(255,255,255,.055);
+    font-family: var(--mono); font-size: 11.5px; color: var(--text-5);
+  }
+  .editor__file { padding: 3px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.08); color: var(--text-2); }
+  .editor__meta { margin-left: auto; }
+  .editor__body { padding: 22px 0 26px; overflow-x: auto; }
+  .code-line { display: flex; gap: 22px; padding: 0 24px; font-family: var(--mono); font-size: 13.5px; line-height: 1.78; white-space: pre; }
+  .code-line__n { flex: 0 0 16px; text-align: right; color: var(--text-7); user-select: none; }
+
+  /* ---------- views band ---------- */
+  .band { position: relative; background: var(--band); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: clamp(60px, 7vw, 92px) 0; }
+  .band__head { display: flex; flex-wrap: wrap; gap: 22px; align-items: baseline; justify-content: space-between; padding-bottom: 38px; }
+  .band__head h2 { font-size: clamp(24px, 2.6vw, 34px); line-height: 1.1; }
+  .band__note { font-family: var(--mono); font-size: 11.5px; color: var(--text-5); padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line-2); }
+  .views { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .view { min-width: 0; }
+  .view__frame {
+    border-radius: 16px; border: 1px solid var(--line-2); background: var(--panel-3);
+    height: 300px; overflow: hidden;
+    transition: transform 340ms var(--ease), border-color 340ms ease, box-shadow 340ms ease;
+  }
+  .view__frame:hover { transform: translateY(-6px); border-color: rgba(168,201,127,.3); box-shadow: 0 24px 60px -30px rgba(0,0,0,.9); }
+  .view__caption { font-family: var(--mono); font-size: 11.5px; color: var(--text-6); padding-top: 14px; }
+  .label { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; color: var(--text-6); }
+
+  .stats { display: flex; border-bottom: 1px solid var(--line); }
+  .stat { flex: 1; padding: 16px 18px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .stat__value { font-family: var(--mono); font-size: 22px; font-weight: 500; margin-top: 6px; letter-spacing: -0.02em; }
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 118px; }
+  .bar { flex: 1; min-width: 0; height: 0; border-radius: 3px 3px 0 0; transition: height 760ms var(--ease), background 200ms ease; }
+  .bar:hover { background: var(--accent) !important; }
+
+  .waterfall { padding: 18px; }
+  .waterfall__head { display: flex; justify-content: space-between; margin-bottom: 18px; }
+  .span-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-family: var(--mono); font-size: 11px; }
+  .span-row__label { flex: 0 0 106px; color: var(--text-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .span-row__track { flex: 1; min-width: 0; height: 7px; border-radius: 999px; background: rgba(255,255,255,.05); position: relative; }
+  .span-row__fill { position: absolute; top: 0; bottom: 0; width: 0; border-radius: 999px; transition: width 900ms var(--ease); }
+  .span-row__ms { flex: 0 0 44px; text-align: right; color: var(--text-6); }
+
+  .verdicts__head { display: flex; justify-content: space-between; align-items: baseline; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+  .verdict-row {
+    display: flex; gap: 12px; align-items: center;
+    padding: 12.5px 18px 12.5px 16px;
+    border-bottom: 1px solid rgba(255,255,255,.035);
+    border-left: 2px solid transparent;
+    transition: background 260ms var(--ease);
+  }
+  .verdict-row:hover { background: rgba(255,255,255,.028); }
+  .verdict-row__text { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .verdict-row__score { flex: 0 0 32px; text-align: right; font-family: var(--mono); font-size: 11px; }
+
+  /* ---------- install + footer ---------- */
+  .install { position: relative; padding: 44px 28px 0; }
+  .install__inner { max-width: var(--shell); margin: 0 auto; display: flex; justify-content: center; }
+  .install__box {
+    display: flex; align-items: center; gap: 18px;
+    border-radius: 999px; border: 1px solid rgba(255,255,255,.08); background: var(--panel);
+    padding: 14px 14px 14px 24px; max-width: 100%; overflow-x: auto;
+    transition: border-color 260ms ease;
+  }
+  .install__box:hover { border-color: rgba(168,201,127,.3); }
+  .install__prompt { font-family: var(--mono); font-size: 14px; color: var(--text-5); }
+  .install__cmd { font-family: var(--mono); font-size: 14px; color: var(--text); white-space: nowrap; }
+  .copy {
+    appearance: none; border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.03);
+    border-radius: 999px; padding: 8px 16px;
+    font-family: var(--mono); font-size: 11.5px; color: #8A918A;
+    cursor: pointer; flex: 0 0 auto; transition: all 220ms ease;
+  }
+  .copy:hover { border-color: rgba(168,201,127,.4); color: var(--text); }
+  .copy[data-copied="1"] { border-color: rgba(168,201,127,.4); background: rgba(168,201,127,.08); color: var(--accent); }
+
+  .footer {
+    position: relative; max-width: var(--shell); margin: 0 auto;
+    padding: 44px 28px 48px; display: flex; flex-wrap: wrap; gap: 22px;
+    justify-content: space-between; align-items: baseline;
+  }
+  .footer__id { display: flex; flex-wrap: wrap; gap: 16px; align-items: baseline; }
+  .footer__mark { font-family: var(--mono); font-size: 12.5px; color: var(--text-4); letter-spacing: -0.01em; }
+  .footer__line { font-size: 13.5px; color: var(--text-6); }
+  .footer__links { display: flex; gap: 10px; font-family: var(--mono); font-size: 12.5px; }
+  .footer__links a { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-5); transition: all 220ms ease; }
+  .footer__links a:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 900px) {
+    .hero__grid, .code-grid { grid-template-columns: minmax(0, 1fr); }
+    .hero { padding-top: clamp(36px, 8vw, 64px); }
+    .audit-card { width: 100%; transform: none; }
+    .card-wrap { padding-inline: 28px; }
+    .hero__glow { left: 10%; }
+    .code-grid > .editor { order: 2; }
+  }
+  @media (max-width: 620px) {
+    .header__prompt-pill { display: none; }
+    .hero__sub { font-size: 16px; }
+    .install__box { border-radius: 14px; flex-wrap: wrap; }
+    .install__cmd { white-space: normal; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true">
+  <div class="backdrop__mask">
+    <div class="backdrop__wash"></div>
+    <div class="backdrop__sweep"></div>
+    <div class="backdrop__sweep-2"></div>
+    <div class="backdrop__grid"></div>
+  </div>
+</div>
+
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<div class="page">
+
+  <header class="header">
+    <div class="shell header__inner">
+      <a class="wordmark" href="#top">
+        <span>eval</span><span class="wordmark__dim">forge</span>
+        <span class="caret" aria-hidden="true"></span>
+      </a>
+      <div class="header__actions">
+        <div class="pill header__prompt-pill"><span class="header__prompt">$</span>pip install evalforge</div>
+        <a class="pill pill--link" href="https://github.com/swapnil5053/evalforge">github<span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <section class="hero">
+      <div class="hero__glow" id="glow" aria-hidden="true"></div>
+      <div class="hero__grid">
+        <div class="hero__copy">
+          <div class="eyebrow" data-reveal="1">LOCAL-FIRST LLM EVALUATION</div>
+          <h1 data-reveal="2">Evals that fail loudly.</h1>
+          <p class="hero__sub" data-reveal="3">Trace. Evaluate. Audit. One pip install, no server.</p>
+          <div class="hero__cta" data-reveal="4">
+            <a class="btn btn--solid" href="#install">get started<span aria-hidden="true">→</span></a>
+            <a class="btn btn--ghost" href="#code">read the docs</a>
+          </div>
+          <div class="flow" data-reveal="5">
+            <strong>trace</strong><em aria-hidden="true">→</em>
+            <strong>evaluate</strong><em aria-hidden="true">→</em>
+            <strong>audit</strong><span class="dot" aria-hidden="true">·</span>
+            <span>no account</span>
+          </div>
+        </div>
+
+        <div class="card-wrap" data-reveal="3">
+          <div class="audit-card" id="audit-card">
+            <div class="audit-card__head">
+              <span class="audit-card__title">faithfulness audit</span>
+              <span class="tag">run #1142</span>
+              <span class="audit-card__score">
+                <b id="audit-score">—</b>
+                <span class="audit-card__delta">−0.11</span>
+              </span>
+            </div>
+            <div class="audit-card__cols">
+              <span class="col-claim">CLAIM</span><span class="col-verdict">VERDICT</span><span class="col-score">SCORE</span>
+            </div>
+            <div id="claims"></div>
+            <div class="audit-card__foot">
+              <span>6 claims extracted · 2 unsupported</span><span>faithfulness · claim-level</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="code-section" id="code">
+      <div class="code-grid">
+        <div data-reveal="1">
+          <h2>A decorator and a function call.</h2>
+          <div class="props">
+            <div class="prop" data-reveal="2"><span class="prop__dash" aria-hidden="true">—</span><span>Traces every call, nested spans included</span></div>
+            <div class="prop" data-reveal="2"><span class="prop__dash" aria-hidden="true">—</span><span>Metrics as functions, not class hierarchies</span></div>
+            <div class="prop" data-reveal="2"><span class="prop__dash" aria-hidden="true">—</span><span>DuckDB embedded, nothing to deploy</span></div>
+          </div>
+        </div>
+        <div class="editor" data-reveal="2">
+          <div class="editor__bar">
+            <span class="editor__file">eval_rag.py</span>
+            <span class="editor__meta">python · evalforge 0.3.0</span>
+          </div>
+          <div class="editor__body" id="code-body"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="shell band__head">
+        <h2 data-reveal="1">Three views. No dashboard tax.</h2>
+        <span class="band__note" data-reveal="1">evalforge serve → localhost:8000</span>
+      </div>
+      <div class="shell views">
+
+        <div class="view" data-reveal="1">
+          <div class="view__frame">
+            <div class="stats">
+              <div class="stat"><div class="label">RUNS 24H</div><div class="stat__value">1,142</div></div>
+              <div class="stat"><div class="label">FAITHFUL</div><div class="stat__value" style="color:var(--red)">0.72</div></div>
+              <div class="stat"><div class="label">COST</div><div class="stat__value">$4.18</div></div>
+            </div>
+            <div style="padding:20px 18px 0">
+              <div class="label" style="margin-bottom:16px">SCORE BY RUN</div>
+              <div class="bars" id="bars"></div>
+            </div>
+          </div>
+          <div class="view__caption">Overview</div>
+        </div>
+
+        <div class="view" data-reveal="2">
+          <div class="view__frame waterfall">
+            <div class="waterfall__head">
+              <span class="label">SPAN</span><span class="label">2.14s TOTAL</span>
+            </div>
+            <div id="waterfall"></div>
+          </div>
+          <div class="view__caption">Trace Waterfall</div>
+        </div>
+
+        <div class="view" data-reveal="3">
+          <div class="view__frame">
+            <div class="verdicts__head">
+              <span class="label">CLAIM VERDICTS</span>
+              <span style="font-family:var(--mono);font-size:11px;color:var(--text-4)">4 / 6 supported</span>
+            </div>
+            <div id="verdicts"></div>
+          </div>
+          <div class="view__caption">Faithfulness Audit</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="install" id="install">
+      <div class="install__inner">
+        <div class="install__box" data-reveal="1">
+          <span class="install__prompt" aria-hidden="true">$</span>
+          <span class="install__cmd" id="install-cmd">pip install evalforge &amp;&amp; evalforge init</span>
+          <button class="copy" id="copy" type="button">copy</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer__id">
+      <span class="footer__mark"><span style="color:var(--text)">eval</span>forge</span>
+      <span class="footer__line">Tracing and evals for LLM apps, on your machine.</span>
+    </div>
+    <div class="footer__links">
+      <a href="https://github.com/swapnil5053/evalforge">github</a>
+      <a href="#code">docs</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var ACCENT = "#A8C97F", WARM = "#C9A961", RED = "#C97A5A";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var CLAIMS = [
+    ["Refunds are issued to the original payment method.", "SUPPORTED", "1.00", ACCENT],
+    ["Partial refunds are available within 30 days.", "SUPPORTED", "0.94", ACCENT],
+    ["Processing takes 5–7 business days.", "PARTIAL", "0.61", WARM],
+    ["Shipping fees are refunded for damaged items.", "SUPPORTED", "0.88", ACCENT],
+    ["Store credit can be converted to cash.", "UNSUPPORTED", "0.12", RED],
+    ["A restocking fee of 8% applies to opened boxes.", "UNSUPPORTED", "0.04", RED]
+  ];
+
+  var VERDICTS = [
+    ["original payment method", "1.00", ACCENT],
+    ["partial within 30 days", "0.94", ACCENT],
+    ["5–7 business days", "0.61", WARM],
+    ["damaged item shipping", "0.88", ACCENT],
+    ["credit → cash", "0.12", RED],
+    ["8% restocking fee", "0.04", RED]
+  ];
+
+  var CODE = [
+    ["from evalforge import trace, evaluate", "#CDD2CB"],
+    ["from evalforge.eval.metrics import faithfulness", "#CDD2CB"],
+    ["", "#CDD2CB"],
+    ["@trace", ACCENT],
+    ["def rag_pipeline(query: str) -> str:", "#CDD2CB"],
+    ["    context = retrieve(query)", "#CDD2CB"],
+    ["    return generate(query, context)", "#CDD2CB"],
+    ["", "#CDD2CB"],
+    ["results = evaluate(", "#CDD2CB"],
+    ['    dataset="my_rag_data",', "#8FB6A8"],
+    ["    task=rag_pipeline,", "#CDD2CB"],
+    ["    metrics=[faithfulness],", "#CDD2CB"],
+    [")", "#CDD2CB"]
+  ];
+
+  var BAR_HEIGHTS = [62, 48, 71, 55, 80, 66, 44, 58, 74, 52, 88, 61, 39, 68, 57, 82, 46, 70, 54, 91, 63, 49, 77, 58, 43, 66];
+  var SKELETON = ["92%", "78%", "86%", "70%", "88%", "64%"];
+
+  var SPANS = [
+    { label: "rag_pipeline",   indent: 0,  x: "0%",  w: "97%", ms: "2140", color: "rgba(255,255,255,0.14)" },
+    { label: "retrieve",       indent: 10, x: "2%",  w: "19%", ms: "402",  color: "rgba(255,255,255,0.22)" },
+    { label: "embed.query",    indent: 20, x: "3%",  w: "6%",  ms: "88",   color: "rgba(255,255,255,0.16)" },
+    { label: "vector.search",  indent: 20, x: "10%", w: "11%", ms: "301",  color: "rgba(255,255,255,0.16)" },
+    { label: "generate",       indent: 10, x: "22%", w: "70%", ms: "1487", color: ACCENT },
+    { label: "llm.completion", indent: 20, x: "23%", w: "67%", ms: "1444", color: "rgba(255,255,255,0.22)" },
+    { label: "grade.faithful", indent: 10, x: "93%", w: "5%",  ms: "51",   color: RED }
+  ];
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function tint(hex, alpha) {
+    var value = hex.replace("#", "");
+    var r = parseInt(value.slice(0, 2), 16);
+    var g = parseInt(value.slice(2, 4), 16);
+    var b = parseInt(value.slice(4, 6), 16);
+    return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+  }
+
+  // ---- audit card: skeleton first, then the real verdicts ----
+  var claimsHost = document.getElementById("claims");
+
+  function renderSkeleton() {
+    claimsHost.textContent = "";
+    SKELETON.forEach(function (width) {
+      var row = el("div", "skeleton-row");
+      var claim = el("div", "shimmer");
+      claim.style.flex = "1";
+      claim.style.minWidth = "0";
+      claim.style.width = width;
+      var verdict = el("div", "shimmer");
+      verdict.style.flex = "0 0 62px";
+      var score = el("div", "shimmer");
+      score.style.flex = "0 0 30px";
+      score.style.animation = "none";
+      score.style.background = "rgba(255,255,255,0.05)";
+      row.appendChild(claim);
+      row.appendChild(verdict);
+      row.appendChild(score);
+      claimsHost.appendChild(row);
+    });
+  }
+
+  function renderClaims() {
+    claimsHost.textContent = "";
+    CLAIMS.forEach(function (claim) {
+      var colour = claim[3];
+      var row = el("div", "claim-row");
+      row.style.borderLeftColor = colour;
+
+      row.appendChild(el("span", "claim-row__text", claim[0]));
+
+      var cell = el("span", "col-verdict");
+      var chip = el("span", "verdict", claim[1]);
+      chip.style.color = colour;
+      chip.style.borderColor = tint(colour, 0.24);
+      chip.style.background = tint(colour, 0.07);
+      cell.appendChild(chip);
+      row.appendChild(cell);
+
+      var score = el("span", "col-score", claim[2]);
+      score.style.fontFamily = "var(--mono)";
+      score.style.fontSize = "12px";
+      score.style.color = "var(--text-4)";
+      row.appendChild(score);
+
+      claimsHost.appendChild(row);
+    });
+    document.getElementById("audit-score").textContent = "0.72";
+  }
+
+  renderSkeleton();
+  window.setTimeout(renderClaims, reduce ? 0 : 1250);
+
+  // ---- code listing ----
+  var codeHost = document.getElementById("code-body");
+  CODE.forEach(function (line, index) {
+    var row = el("div", "code-line");
+    row.appendChild(el("span", "code-line__n", String(index + 1)));
+    var text = el("span", null, line[0]);
+    text.style.color = line[1];
+    row.appendChild(text);
+    codeHost.appendChild(row);
+  });
+
+  // ---- overview bars ----
+  var barsHost = document.getElementById("bars");
+  BAR_HEIGHTS.forEach(function (height) {
+    var bar = el("div", "bar");
+    bar.style.background = height > 78 ? tint(ACCENT, 0.62) : "rgba(255,255,255,0.14)";
+    bar.setAttribute("data-grow", height + "%");
+    barsHost.appendChild(bar);
+  });
+
+  // ---- trace waterfall ----
+  var waterfallHost = document.getElementById("waterfall");
+  SPANS.forEach(function (span) {
+    var row = el("div", "span-row");
+    var label = el("span", "span-row__label", span.label);
+    label.style.paddingLeft = span.indent + "px";
+    row.appendChild(label);
+
+    var track = el("div", "span-row__track");
+    var fill = el("div", "span-row__fill");
+    fill.style.left = span.x;
+    fill.style.background = span.color;
+    fill.setAttribute("data-bar", span.w);
+    track.appendChild(fill);
+    row.appendChild(track);
+
+    row.appendChild(el("span", "span-row__ms", span.ms));
+    waterfallHost.appendChild(row);
+  });
+
+  // ---- claim verdict list ----
+  var verdictsHost = document.getElementById("verdicts");
+  VERDICTS.forEach(function (item) {
+    var row = el("div", "verdict-row");
+    row.style.borderLeftColor = item[2];
+    row.appendChild(el("span", "verdict-row__text", item[0]));
+    var score = el("span", "verdict-row__score", item[1]);
+    score.style.color = item[2];
+    row.appendChild(score);
+    verdictsHost.appendChild(row);
+  });
+
+  // ---- reveal, growth and scroll effects ----
+  var progress = document.getElementById("progress");
+  var glow = document.getElementById("glow");
+  var card = document.getElementById("audit-card");
+
+  function scan() {
+    var viewport = window.innerHeight;
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-bar]"), function (node) {
+      var target = node.getAttribute("data-bar");
+      if (node.dataset.shown === "1") { return; }
+      if (reduce || node.parentElement.getBoundingClientRect().top < viewport * 0.94) {
+        node.style.width = target;
+        node.dataset.shown = "1";
+      }
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-grow]"), function (node, index) {
+      if (node.dataset.shown === "1") { return; }
+      if (reduce || node.getBoundingClientRect().top < viewport * 0.96) {
+        node.style.transitionDelay = Math.min(index, 26) * 22 + "ms";
+        node.style.height = node.getAttribute("data-grow");
+        node.dataset.shown = "1";
+      }
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-reveal]"), function (node) {
+      if (node.dataset.shown === "1") { return; }
+      if (!node.dataset.primed) {
+        node.dataset.primed = "1";
+        node.style.transition = "opacity 780ms var(--ease), transform 780ms var(--ease)";
+        node.style.transitionDelay = (parseInt(node.getAttribute("data-reveal"), 10) - 1) * 95 + "ms";
+      }
+      if (reduce || node.getBoundingClientRect().top < viewport * 0.9) {
+        node.style.opacity = "1";
+        node.style.transform = "none";
+        node.dataset.shown = "1";
+      } else {
+        node.style.opacity = "0";
+        node.style.transform = "translateY(24px)";
+      }
+    });
+  }
+
+  function onScroll() {
+    scan();
+    var y = window.scrollY || 0;
+    var max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    progress.style.width = Math.min(100, (y / max) * 100) + "%";
+    if (reduce) return;
+    if (card && window.innerWidth > 900) {
+      card.style.transform = "rotate(2.5deg) translateY(" + Math.max(-30, -y * 0.06).toFixed(1) + "px)";
+    }
+    if (glow) glow.style.transform = "translateY(" + (y * 0.12).toFixed(1) + "px)";
+  }
+
+  scan();
+  requestAnimationFrame(scan);
+  onScroll();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll, { passive: true });
+
+  // ---- copy the install command ----
+  var copyButton = document.getElementById("copy");
+  var command = "pip install evalforge && evalforge init";
+  var resetTimer;
+
+  copyButton.addEventListener("click", function () {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(command).catch(function () {});
+    }
+    copyButton.textContent = "copied";
+    copyButton.setAttribute("data-copied", "1");
+    window.clearTimeout(resetTimer);
+    resetTimer = window.setTimeout(function () {
+      copyButton.textContent = "copy";
+      copyButton.removeAttribute("data-copied");
+    }, 1600);
+  });
+})();
+</script>
+</body>
+</html>

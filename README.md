@@ -145,6 +145,12 @@ analytics, the evaluation engine, the faithfulness audit, token attribution, the
 CLI, and the dashboard's Overview and Trace Explorer are in place. The remaining
 dashboard pages (experiments, datasets, audits) and the MCP server are next.
 
+## Landing page
+
+`docs/index.html` is a self-contained page describing the project — no build step,
+no framework. Serve it from GitHub Pages by pointing Pages at the `docs/` folder on
+`main`, or open the file directly.
+
 ## License
 
 Apache-2.0. See [ATTRIBUTION.md](ATTRIBUTION.md) for provenance - EvalForge is
