@@ -6,7 +6,7 @@ EvalForge records function calls and model usage, stores the results in a local 
 database, and provides tools to compare runs and inspect RAG answers at the claim level.
 No server, account, or hosted backend required.
 
-**Python 3.10+ · 6.4k lines · 195 tests · DuckDB · Apache-2.0**
+**Python 3.10+ · 6.9k lines · 212 tests · DuckDB · Apache-2.0**
 
 [Landing page](https://swapnil5053.github.io/eval-forge/)
 
@@ -24,6 +24,18 @@ No server, account, or hosted backend required.
 * **Interfaces** — local dashboard, CLI, and MCP server.
 
 ---
+
+## Try it without writing any code
+
+```bash
+pip install evalforge
+evalforge demo
+```
+
+Seeds a week of sample traffic and opens the dashboard with every page populated —
+traces, an afternoon of failures, three experiments, a dataset, and three claim-level
+audit reports. Nothing calls a model, so no API key is needed, and the same seed
+produces the same database every time.
 
 ## Quick start
 
@@ -112,6 +124,24 @@ results = evaluate(
 
 Evaluation goes through LiteLLM, so the judge model can be changed without touching the
 evaluation code. Local models such as Ollama work too, which keeps the loop offline.
+
+### Failing a build on a regression
+
+```bash
+evalforge eval gate rag-v2 --baseline rag-v1 --max-drop 0.05
+```
+
+```text
+metric            rag-v1  rag-v2   delta
+faithfulness       0.810   0.740  -0.070  FAIL
+hallucination      0.120   0.090  +0.030  ok
+
+1 metric regressed past 0.050: faithfulness
+```
+
+Exits non-zero, so it can gate a pull request. Which direction counts as a regression
+comes from each score's own polarity — hallucination rising fails for the same reason
+faithfulness falling does.
 
 ---
 
@@ -202,6 +232,15 @@ toxicity       → lower is better
 
 Consumers read the declared polarity instead of assuming every score points the same way,
 so nothing in the codebase hard-codes "low is bad".
+
+### Ingestion is batched, but not blindly
+
+Upserting spans one row at a time took 22 seconds for 2,400 of them. They now go in a
+few hundred rows per statement, which takes 0.4. The catch is that DuckDB applies the
+conflict clause once per statement, so a span whose start and end arrive in the same
+batch would keep the first write and silently drop the second — exactly the merge the
+spool depends on. Batches are cut before any id they already hold, which preserves the
+merge and costs one extra statement per collision.
 
 ### Cost accounting
 
@@ -324,7 +363,7 @@ evalforge trace stats
 Current test suite:
 
 ```text
-195 tests
+212 tests
 ```
 
 `docs/index.html` is the landing page — a self-contained file with no build step. Open it

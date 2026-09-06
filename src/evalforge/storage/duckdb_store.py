@@ -10,7 +10,7 @@ import datetime
 import json
 import logging
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Iterator, List, Optional
 
 import duckdb
 
@@ -18,6 +18,10 @@ from ..core.spool import default_home
 from . import migrations
 
 LOGGER = logging.getLogger(__name__)
+
+# Rows per INSERT. Large enough that the per-statement cost stops mattering,
+# small enough that the parameter list stays a sensible size.
+BATCH_ROWS = 400
 
 TABLES = {
     "traces": ("id", "name", "start_time", "end_time", "status", "tags", "metadata"),
@@ -112,7 +116,6 @@ class Store:
         if not rows:
             return 0
 
-        placeholders = ", ".join("?" for _ in columns)
         # A span arrives twice, as span_start then span_end. COALESCE keeps whichever
         # write carried a value, so the two halves merge in either order.
         updates = ", ".join(
@@ -120,11 +123,21 @@ class Store:
             for column in columns
             if column != "id"
         )
-        self.db.executemany(
-            f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders}) "
-            f"ON CONFLICT (id) DO UPDATE SET {updates}",
-            rows,
-        )
+        statement = f"INSERT INTO {table} ({', '.join(columns)}) VALUES %s "
+        statement += f"ON CONFLICT (id) DO UPDATE SET {updates}"
+        placeholders = "(" + ", ".join("?" for _ in columns) + ")"
+
+        self.db.execute("BEGIN TRANSACTION")
+        try:
+            for batch in _batches(rows, columns.index("id")):
+                self.db.execute(
+                    statement % ", ".join([placeholders] * len(batch)),
+                    [value for row in batch for value in row],
+                )
+        except Exception:
+            self.db.execute("ROLLBACK")
+            raise
+        self.db.execute("COMMIT")
         return len(rows)
 
     def count(self, table: str) -> int:
@@ -149,3 +162,25 @@ def _encode(column: str, value: Any) -> Any:
     if column in _TIME_COLUMNS and isinstance(value, str):
         return datetime.datetime.fromisoformat(value)
     return value
+
+
+def _batches(rows: List[tuple], id_column: int) -> Iterator[List[tuple]]:
+    """Group rows into statements, cutting before any id the batch already holds.
+
+    Sending many rows in one INSERT is what makes ingestion fast - row-at-a-time
+    upserting a few thousand spans takes tens of seconds. But DuckDB applies the
+    conflict clause once per statement, so a span whose start and end land in the
+    same batch would keep the first write and silently drop the second. Splitting
+    on the repeat preserves the merge and costs one extra statement per collision.
+    """
+    batch: List[tuple] = []
+    seen: set = set()
+    for row in rows:
+        identifier = row[id_column]
+        if identifier in seen or len(batch) >= BATCH_ROWS:
+            yield batch
+            batch, seen = [], set()
+        batch.append(row)
+        seen.add(identifier)
+    if batch:
+        yield batch

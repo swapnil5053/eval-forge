@@ -9,7 +9,7 @@ import click
 from rich.table import Table
 from rich.tree import Tree
 
-from .. import __version__
+from .. import __version__, demo as demo_data
 from ..core.spool import default_home, default_spool_dir
 from ..storage import queries
 from ..storage.duckdb_store import Store
@@ -42,6 +42,40 @@ def init(db: Optional[Path]) -> None:
         console.print(f"database  [cyan]{store.path}[/cyan]")
     console.print(f"spool     [cyan]{spool_dir}[/cyan]")
     console.print(f"home      [cyan]{default_home()}[/cyan]")
+
+
+@cli.command()
+@click.option("--db", type=click.Path(path_type=Path), help="Database file to fill.")
+@click.option("--replace", is_flag=True, help="Overwrite a database that already has traces.")
+@click.option("--no-serve", is_flag=True, help="Seed and stop, without opening the dashboard.")
+@click.pass_context
+def demo(ctx: click.Context, db: Optional[Path], replace: bool, no_serve: bool) -> None:
+    """Fill the database with a week of sample traffic and open the dashboard.
+
+    Nothing here calls a model, so no API key is needed. Use --replace to reseed.
+    """
+    with Store(db) as store:
+        held = store.count("traces")
+        if held and not replace:
+            raise click.ClickException(
+                f"{store.path} already holds {held:,} traces. Pass --replace to overwrite "
+                "them, or --db to seed a different file."
+            )
+        if held:
+            for table in demo_data.TABLES:
+                store.db.execute(f"DELETE FROM {table}")
+        written = demo_data.seed(store)
+        path = store.path
+
+    console.print(f"seeded [cyan]{path}[/cyan]")
+    for label, count in written.items():
+        console.print(f"  {label:<14} [green]{count:,}[/green]")
+    console.print("\n[dim]judge verdicts and costs are fixtures - no API key was used[/dim]")
+
+    if no_serve:
+        console.print("\nRun [cyan]evalforge serve[/cyan] to open the dashboard.")
+        return
+    ctx.invoke(serve, no_ingest=True)
 
 
 @cli.command()

@@ -3,7 +3,11 @@ import json
 
 import pytest
 
+from evalforge.storage import duckdb_store as store_module
 from evalforge.storage.duckdb_store import Store
+
+
+_WHEN = datetime.datetime(2026, 9, 1, 12, 0, tzinfo=datetime.timezone.utc)
 
 
 @pytest.fixture
@@ -102,3 +106,50 @@ def test_string_output_is_stored_as_valid_json(store):
 
     stored, = store.db.execute("SELECT output FROM spans WHERE id = 's1'").fetchone()
     assert json.loads(stored) == "Paris is the capital."
+
+
+def test_two_halves_of_a_span_merge_even_inside_one_batch(tmp_path):
+    """Batched inserts apply the conflict clause once per statement.
+
+    Both halves in one call must still merge, or every span ingested from a single
+    spool file would keep its start and lose its end.
+    """
+    with Store(tmp_path / "merge.db") as store:
+        store.upsert(
+            "spans",
+            [
+                {"id": "s1", "trace_id": "t1", "name": "generate", "start_time": _WHEN},
+                {"id": "s1", "end_time": _WHEN, "output": "done", "prompt_tokens": 12},
+            ],
+        )
+        row = store.db.execute(
+            "SELECT name, output, prompt_tokens, end_time IS NOT NULL FROM spans"
+        ).fetchone()
+
+    assert row == ("generate", '"done"', 12, True)
+
+
+def test_a_repeated_id_far_apart_still_merges(tmp_path):
+    """The split has to survive a batch boundary, not just the row next door."""
+    filler = [
+        {"id": f"f{index}", "trace_id": "t1", "name": "x", "start_time": _WHEN}
+        for index in range(store_module.BATCH_ROWS + 25)
+    ]
+    with Store(tmp_path / "far.db") as store:
+        store.upsert(
+            "spans",
+            [{"id": "s1", "trace_id": "t1", "name": "generate", "start_time": _WHEN}]
+            + filler
+            + [{"id": "s1", "output": "done"}],
+        )
+        assert store.count("spans") == len(filler) + 1
+        assert store.db.execute(
+            "SELECT name, output FROM spans WHERE id = 's1'"
+        ).fetchone() == ("generate", '"done"')
+
+
+def test_a_failed_batch_leaves_nothing_behind(tmp_path):
+    with Store(tmp_path / "rollback.db") as store:
+        with pytest.raises(Exception):
+            store.upsert("spans", [{"id": "ok", "name": "a"}, {"trace_id": "no id"}])
+        assert store.count("spans") == 0

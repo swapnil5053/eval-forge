@@ -128,6 +128,74 @@ def eval_show(name: str) -> None:
     console.print(table)
 
 
+@eval_group.command("gate")
+@click.argument("name")
+@click.option("--baseline", required=True, help="Experiment to compare against.")
+@click.option(
+    "--max-drop", default=0.02, show_default=True,
+    help="How far a metric may move the wrong way before the gate fails.",
+)
+@click.option("--metric", "only", multiple=True, help="Gate on this metric only. Repeatable.")
+def eval_gate(name: str, baseline: str, max_drop: float, only: tuple) -> None:
+    """Fail if NAME regressed against --baseline. Exits 1 so CI can stop a merge.
+
+    Which direction counts as a regression comes from each score's own polarity,
+    so hallucination going up fails for the same reason faithfulness going down does.
+    """
+    if max_drop < 0:
+        raise click.BadParameter("--max-drop is a distance, so it cannot be negative.")
+
+    with _read_only() as store:
+        runs = {row.name: row for row in queries.experiments(store)}
+
+    for wanted in (name, baseline):
+        if wanted not in runs:
+            raise click.ClickException(
+                f"no experiment named {wanted!r}. Run 'evalforge eval list' to see what is stored."
+            )
+
+    opened, was = runs[name], runs[baseline]
+    shared = sorted(set(opened.means) & set(was.means) & (set(only) or set(opened.means)))
+    if not shared:
+        raise click.ClickException(
+            f"{name!r} and {baseline!r} share no metric to compare"
+            + (f" among {', '.join(only)}." if only else ".")
+        )
+
+    table = Table(box=None, pad_edge=False)
+    for column in ("metric", baseline, name, "delta", ""):
+        table.add_column(column, justify="right" if column != "metric" else "left")
+
+    regressed = []
+    for metric in shared:
+        before, after = was.means[metric], opened.means[metric]
+        higher_is_better = opened.polarity.get(metric, True)
+        # Movement in the direction the metric wants, whichever direction that is.
+        gained = (after - before) if higher_is_better else (before - after)
+        failed = gained < -max_drop
+        if failed:
+            regressed.append(metric)
+        table.add_row(
+            metric,
+            f"{before:.3f}",
+            f"{after:.3f}",
+            f"{gained:+.3f}",
+            "[red]FAIL[/red]" if failed else "[dim]ok[/dim]",
+        )
+
+    console.print(table)
+    if not regressed:
+        console.print(f"\n[dim]no metric moved more than {max_drop:.3f} the wrong way[/dim]")
+        return
+
+    plural = "s" if len(regressed) > 1 else ""
+    console.print(
+        f"\n[red]{len(regressed)} metric{plural} regressed past {max_drop:.3f}:[/red] "
+        + ", ".join(regressed)
+    )
+    raise SystemExit(1)
+
+
 @eval_group.command("datasets")
 def eval_datasets() -> None:
     """List stored datasets."""
