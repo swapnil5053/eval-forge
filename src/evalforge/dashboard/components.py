@@ -54,18 +54,18 @@ def backdrop() -> rx.Component:
 _MASK = (
     "radial-gradient(ellipse 115% 85% at 50% 8%, #000 0%, rgba(0,0,0,0.55) 58%, transparent 94%)"
 )
-_GLOW = "radial-gradient(ellipse 70% 55% at 50% 0%, rgba(168,201,127,0.075) 0%, rgba(168,201,127,0) 70%)"
+_GLOW = "radial-gradient(ellipse 70% 55% at 50% 0%, rgba(224,163,60,0.055) 0%, rgba(224,163,60,0) 70%)"
 _SWEEP = {"position": "absolute", "inset": "-40% -20%", "background_size": "300% 300%"}
 _SWEEP_ONE = (
     "repeating-linear-gradient(115deg,"
-    "rgba(168,201,127,0) 0%,rgba(168,201,127,0) 6.5%,rgba(168,201,127,0.09) 9.2%,"
-    "rgba(143,182,168,0.155) 10%,rgba(168,201,127,0.09) 10.8%,rgba(168,201,127,0) 13.5%,"
-    "rgba(168,201,127,0) 20%)"
+    "rgba(224,163,60,0) 0%,rgba(224,163,60,0) 6.5%,rgba(224,163,60,0.062) 9.2%,"
+    "rgba(201,168,120,0.105) 10%,rgba(224,163,60,0.062) 10.8%,rgba(224,163,60,0) 13.5%,"
+    "rgba(224,163,60,0) 20%)"
 )
 _SWEEP_TWO = (
     "repeating-linear-gradient(115deg,"
-    "rgba(143,182,168,0) 0%,rgba(143,182,168,0) 11%,rgba(143,182,168,0.068) 16%,"
-    "rgba(143,182,168,0) 21%,rgba(143,182,168,0) 33%)"
+    "rgba(201,168,120,0) 0%,rgba(201,168,120,0) 11%,rgba(201,168,120,0.046) 16%,"
+    "rgba(201,168,120,0) 21%,rgba(201,168,120,0) 33%)"
 )
 
 

@@ -26,15 +26,19 @@ TEXT_DIM = "#AEB5AB"
 TEXT_MUTED = "#828981"
 TEXT_FAINT = "#767D74"
 
-# One accent: the active nav item, the primary chart series, bars, and interactive
-# affordances on hover. It doubles as the "good" status colour, as on the landing page.
-ACCENT = "#A8C97F"
-ACCENT_BRIGHT = "#BCDC92"
-ACCENT_MUTED = "rgba(168, 201, 127, 0.35)"
+# One accent, used for chrome only: the active nav item, the primary chart series,
+# bars, and interactive affordances on hover. It is deliberately not the "good"
+# colour - see the status ramp below.
+ACCENT = "#E0A33C"
+ACCENT_BRIGHT = "#F0B95B"
+ACCENT_MUTED = "rgba(224, 163, 60, 0.35)"
 
-OK = "#A8C97F"
-WARN = "#C9A961"
-ERROR = "#C97A5A"
+# Nothing is coloured for being fine. A healthy status, a supported claim and an
+# improved score read as ordinary text; colour is reserved for what needs looking at,
+# which is what makes a red row findable at a glance.
+OK = TEXT_DIM
+WARN = "#D99A3F"
+ERROR = "#C4503E"
 
 # Chart series, dimmest first: p50 is background information, p99 is the alarm.
 SERIES = (TEXT_FAINT, TEXT_DIM, ACCENT)
@@ -170,7 +174,7 @@ VERDICT_COLOURS = {
     "SUPPORTED": OK,
     "PARTIALLY_SUPPORTED": WARN,
     "UNSUPPORTED": ERROR,
-    "CONTRADICTED": "#E0603C",
+    "CONTRADICTED": "#E0533A",
 }
 
 
@@ -179,7 +183,7 @@ def status_colour(status: str) -> str:
 
 
 def score_colour(value: float, higher_is_better: bool = True) -> str:
-    """Green when the score points the good way, amber mid, red when it does not.
+    """Unmarked when the score points the good way, amber mid, red when it does not.
 
     The midpoint here is the same one :func:`evalforge.eval.metrics.is_good` uses; this
     adds a band above it so a strong score and a barely-passing one do not look alike.

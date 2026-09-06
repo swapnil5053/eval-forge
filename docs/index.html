@@ -9,7 +9,7 @@
 <meta property="og:description" content="Trace, evaluate and audit LLM applications on your own machine. One pip install, no server.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0A0B0A">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230A0B0A'/><rect x='6' y='14' width='20' height='4' fill='%23A8C97F'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230A0B0A'/><rect x='6' y='14' width='20' height='4' fill='%23E0A33C'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -31,8 +31,8 @@
     --line-2: rgba(255, 255, 255, 0.07);
     --line-3: rgba(255, 255, 255, 0.09);
     /* One accent. Swap this and the whole page retunes. */
-    --accent: #A8C97F;
-    --accent-bright: #BCDC92;
+    --accent: #E0A33C;
+    --accent-bright: #F0B95B;
     --warm: #C9A961;
     --red: #C97A5A;
     --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -75,15 +75,15 @@
   .backdrop__sweep, .backdrop__sweep-2 { position: absolute; inset: -40% -20%; background-size: 300% 300%; }
   .backdrop__sweep {
     background: repeating-linear-gradient(115deg,
-      rgba(168,201,127,0) 0%, rgba(168,201,127,0) 6.5%, rgba(168,201,127,.1) 9.2%,
-      rgba(143,182,168,.17) 10%, rgba(168,201,127,.1) 10.8%, rgba(168,201,127,0) 13.5%,
-      rgba(168,201,127,0) 20%);
+      rgba(224,163,60,0) 0%, rgba(224,163,60,0) 6.5%, rgba(224,163,60,.07) 9.2%,
+      rgba(201,168,120,.115) 10%, rgba(224,163,60,.07) 10.8%, rgba(224,163,60,0) 13.5%,
+      rgba(224,163,60,0) 20%);
     animation: ef-sweep 42s linear infinite;
   }
   .backdrop__sweep-2 {
     background: repeating-linear-gradient(115deg,
-      rgba(143,182,168,0) 0%, rgba(143,182,168,0) 11%, rgba(143,182,168,.075) 16%,
-      rgba(143,182,168,0) 21%, rgba(143,182,168,0) 33%);
+      rgba(201,168,120,0) 0%, rgba(201,168,120,0) 11%, rgba(201,168,120,.05) 16%,
+      rgba(201,168,120,0) 21%, rgba(201,168,120,0) 33%);
     animation: ef-sweep 67s linear infinite reverse;
   }
   .backdrop__grid {
@@ -104,7 +104,7 @@
     color: var(--text-3); font-family: var(--mono); font-size: 12.5px;
   }
   .pill--link { border-color: var(--line-3); transition: border-color 220ms ease, background 220ms ease, color 220ms ease; }
-  .pill--link:hover { border-color: rgba(168,201,127,.45); background: rgba(168,201,127,.07); color: var(--text); }
+  .pill--link:hover { border-color: rgba(224,163,60,.45); background: rgba(224,163,60,.07); color: var(--text); }
 
   /* ---------- header ---------- */
   .header {
@@ -135,7 +135,7 @@
     position: absolute; top: 6%; left: 44%;
     width: 52vw; height: 52vw; max-width: 760px; max-height: 760px;
     border-radius: 50%; pointer-events: none;
-    background: radial-gradient(circle, rgba(168,201,127,.055) 0%, rgba(168,201,127,0) 66%);
+    background: radial-gradient(circle, rgba(224,163,60,.055) 0%, rgba(224,163,60,0) 66%);
   }
   .hero__grid {
     position: relative; display: grid; align-items: center;
@@ -146,7 +146,7 @@
   .eyebrow {
     display: inline-flex; align-items: center; margin-bottom: 30px;
     padding: 7px 15px; border-radius: 999px;
-    border: 1px solid rgba(168,201,127,.22); background: rgba(168,201,127,.05);
+    border: 1px solid rgba(224,163,60,.22); background: rgba(224,163,60,.05);
     font-family: var(--mono); font-size: 11.5px; letter-spacing: .05em; color: var(--accent);
   }
   .hero h1 { font-size: clamp(42px, 6.2vw, 86px); line-height: .94; letter-spacing: -0.035em; max-width: 14ch; text-wrap: balance; }
@@ -161,7 +161,7 @@
     background: var(--accent); color: var(--bg); font-weight: 500;
     transition: transform 240ms var(--ease), box-shadow 240ms ease, background 240ms ease;
   }
-  .btn--solid:hover { background: var(--accent-bright); color: var(--bg); transform: translateY(-2px); box-shadow: 0 10px 30px -10px rgba(168,201,127,.5); }
+  .btn--solid:hover { background: var(--accent-bright); color: var(--bg); transform: translateY(-2px); box-shadow: 0 10px 30px -10px rgba(224,163,60,.5); }
   .btn--ghost {
     border: 1px solid rgba(255,255,255,.1); background: var(--panel); color: var(--text-3);
     transition: border-color 240ms ease, color 240ms ease, transform 240ms var(--ease);
@@ -271,7 +271,7 @@
     height: 300px; overflow: hidden;
     transition: transform 340ms var(--ease), border-color 340ms ease, box-shadow 340ms ease;
   }
-  .view__frame:hover { transform: translateY(-6px); border-color: rgba(168,201,127,.3); box-shadow: 0 24px 60px -30px rgba(0,0,0,.9); }
+  .view__frame:hover { transform: translateY(-6px); border-color: rgba(224,163,60,.3); box-shadow: 0 24px 60px -30px rgba(0,0,0,.9); }
   .view__caption { font-family: var(--mono); font-size: 11.5px; color: var(--text-6); padding-top: 14px; }
   .label { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; color: var(--text-6); }
 
@@ -312,7 +312,7 @@
     padding: 14px 14px 14px 24px; max-width: 100%; overflow-x: auto;
     transition: border-color 260ms ease;
   }
-  .install__box:hover { border-color: rgba(168,201,127,.3); }
+  .install__box:hover { border-color: rgba(224,163,60,.3); }
   .install__next {
     margin: 18px 0 0; text-align: center;
     font-family: var(--mono); font-size: 12px; color: var(--text-6);
@@ -326,8 +326,8 @@
     font-family: var(--mono); font-size: 11.5px; color: #8A918A;
     cursor: pointer; flex: 0 0 auto; transition: all 220ms ease;
   }
-  .copy:hover { border-color: rgba(168,201,127,.4); color: var(--text); }
-  .copy[data-copied="1"] { border-color: rgba(168,201,127,.4); background: rgba(168,201,127,.08); color: var(--accent); }
+  .copy:hover { border-color: rgba(224,163,60,.4); color: var(--text); }
+  .copy[data-copied="1"] { border-color: rgba(224,163,60,.4); background: rgba(224,163,60,.08); color: var(--accent); }
 
   .footer {
     position: relative; max-width: var(--shell); margin: 0 auto;
@@ -530,23 +530,23 @@
 (function () {
   "use strict";
 
-  var ACCENT = "#A8C97F", WARM = "#C9A961", RED = "#C97A5A";
+  var ACCENT = "#E0A33C", QUIET = "#AEB5AB", WARM = "#D99A3F", RED = "#C4503E";
   var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var CLAIMS = [
-    ["Refunds are issued to the original payment method.", "SUPPORTED", "1.00", ACCENT],
-    ["Partial refunds are available within 30 days.", "SUPPORTED", "0.94", ACCENT],
+    ["Refunds are issued to the original payment method.", "SUPPORTED", "1.00", QUIET],
+    ["Partial refunds are available within 30 days.", "SUPPORTED", "0.94", QUIET],
     ["Processing takes 5–7 business days.", "PARTIAL", "0.61", WARM],
-    ["Shipping fees are refunded for damaged items.", "SUPPORTED", "0.88", ACCENT],
+    ["Shipping fees are refunded for damaged items.", "SUPPORTED", "0.88", QUIET],
     ["Store credit can be converted to cash.", "UNSUPPORTED", "0.12", RED],
     ["A restocking fee of 8% applies to opened boxes.", "UNSUPPORTED", "0.04", RED]
   ];
 
   var VERDICTS = [
-    ["original payment method", "1.00", ACCENT],
-    ["partial within 30 days", "0.94", ACCENT],
+    ["original payment method", "1.00", QUIET],
+    ["partial within 30 days", "0.94", QUIET],
     ["5–7 business days", "0.61", WARM],
-    ["damaged item shipping", "0.88", ACCENT],
+    ["damaged item shipping", "0.88", QUIET],
     ["credit → cash", "0.12", RED],
     ["8% restocking fee", "0.04", RED]
   ];
