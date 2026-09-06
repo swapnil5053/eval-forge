@@ -1,9 +1,9 @@
 """Token cost estimation.
 
-Prices come from ``litellm.model_cost`` at import time rather than a vendored
-price table, so they track LiteLLM's releases instead of going stale in this
-repository. LiteLLM is an optional dependency: without it every estimate is
-None and nothing raises.
+Prices come from ``litellm.model_cost``, looked up once on the first estimate,
+rather than from a price table vendored into this repository that would go stale.
+LiteLLM is an optional dependency: without it every estimate is None and nothing
+raises.
 """
 
 import logging

@@ -171,8 +171,12 @@ def status_colour(status: str) -> str:
 
 
 def score_colour(value: float, higher_is_better: bool = True) -> str:
-    """Green when the score points the good way, amber mid, red when it does not."""
-    good = value if higher_is_better else 1.0 - value
-    if good >= 0.8:
+    """Green when the score points the good way, amber mid, red when it does not.
+
+    The midpoint here is the same one :func:`evalforge.eval.metrics.is_good` uses; this
+    adds a band above it so a strong score and a barely-passing one do not look alike.
+    """
+    towards_good = value if higher_is_better else 1.0 - value
+    if towards_good >= 0.8:
         return OK
-    return WARN if good >= 0.5 else ERROR
+    return WARN if towards_good >= 0.5 else ERROR

@@ -39,6 +39,9 @@ def read_only_store() -> Store:
     return Store(default_db_path(), read_only=True)
 
 
+# --- overview and traces -----------------------------------------------------
+
+
 def summary(store: Store, hours: float = 24) -> Dict[str, Any]:
     row = queries.trace_summary(store, hours=hours)
     if not row.traces:
@@ -257,6 +260,9 @@ def json_parts(text: str) -> List[Dict[str, str]]:
     return parts
 
 
+# --- formatting primitives ---------------------------------------------------
+
+
 def milliseconds(latency: Optional[float]) -> str:
     if latency is None:
         return EMPTY
@@ -294,6 +300,9 @@ def compact_json(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, default=str)
+
+
+# --- experiments and datasets ------------------------------------------------
 
 
 def experiment_rows(rows: List[queries.ExperimentRow]) -> List[Dict[str, Any]]:
@@ -415,6 +424,9 @@ def dataset_item_rows(rows: List[dict]) -> List[Dict[str, str]]:
         }
         for row in rows
     ]
+
+
+# --- faithfulness audits -----------------------------------------------------
 
 
 def audit_rows(rows: List[dict]) -> List[Dict[str, Any]]:

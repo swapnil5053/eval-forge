@@ -150,10 +150,11 @@ app = rx.App(
     stylesheets=styles.STYLESHEETS,
     head_components=[rx.el.style("body { margin: 0; }")],
 )
-app.add_page(index, route="/", title="EvalForge", on_load=Panel.refresh)
-app.add_page(trace_explorer, route="/traces", title="EvalForge · traces", on_load=Panel.refresh)
-app.add_page(
-    experiment_list, route="/experiments", title="EvalForge · experiments", on_load=Panel.refresh
-)
-app.add_page(dataset_list, route="/datasets", title="EvalForge · datasets", on_load=Panel.refresh)
-app.add_page(audit_list, route="/audits", title="EvalForge · audits", on_load=Panel.refresh)
+for page, route, title in (
+    (index, "/", "EvalForge"),
+    (trace_explorer, "/traces", "EvalForge · traces"),
+    (experiment_list, "/experiments", "EvalForge · experiments"),
+    (dataset_list, "/datasets", "EvalForge · datasets"),
+    (audit_list, "/audits", "EvalForge · audits"),
+):
+    app.add_page(page, route=route, title=title, on_load=Panel.open_page(route))

@@ -5,7 +5,9 @@ import pytest
 from evalforge.storage import queries
 from evalforge.storage.duckdb_store import Store
 
-BASE = datetime.datetime(2026, 9, 1, 12, 0, tzinfo=datetime.timezone.utc)
+# Relative to now: daily_series windows from today, so a hard-coded date would
+# quietly fall out of range as the calendar moves.
+BASE = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
 
 
 def iso(offset_seconds):
@@ -238,21 +240,28 @@ def test_daily_series_fills_days_with_no_traces(store):
 
 
 def test_daily_series_counts_today(store):
-    with pytest.MonkeyPatch.context() as patch:
-        today = datetime.datetime.now(datetime.timezone.utc)
-        store.upsert(
-            "traces",
-            [
-                {"id": "t9", "name": "rag", "start_time": today,
-                 "end_time": today + datetime.timedelta(milliseconds=200), "status": "error"}
-            ],
-        )
-        patch.undo()
+    """A trace recorded now lands on the last day of the window."""
+    before = queries.daily_series(store, days=2)[-1]
+    now = datetime.datetime.now(datetime.timezone.utc)
+    store.upsert(
+        "traces",
+        [
+            {
+                "id": "t9",
+                "name": "rag",
+                "start_time": now,
+                "end_time": now + datetime.timedelta(milliseconds=200),
+                "status": "error",
+            }
+        ],
+    )
 
-    series = queries.daily_series(store, days=2)
-    assert series[-1].traces == 1
-    assert series[-1].errors == 1
-    assert series[-1].p95_latency_ms == pytest.approx(200, abs=1)
+    after = queries.daily_series(store, days=2)[-1]
+
+    assert after.day == now.date()
+    assert after.traces == before.traces + 1
+    assert after.errors == before.errors + 1
+    assert after.p95_latency_ms is not None
 
 
 def test_recent_errors_reports_the_exception_line(store):

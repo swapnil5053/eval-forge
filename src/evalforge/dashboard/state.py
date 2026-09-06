@@ -7,7 +7,7 @@ import reflex as rx
 
 from ..eval import faithfulness_audit
 from ..storage import queries
-from ..storage.duckdb_store import DatabaseLocked
+from ..storage.duckdb_store import DatabaseLocked, Store
 from . import data
 
 LOGGER = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ SERIES_DAYS = 7
 class Panel(rx.State):
     """One state for the whole panel. Reads only; writes go through the spool."""
 
-    connected: bool = False
+    route: str = "/"
     footer: Dict[str, str] = {"traces": data.EMPTY, "updated": data.EMPTY, "size": data.EMPTY}
 
     summary: Dict[str, Any] = dict(data.EMPTY_SUMMARY)
@@ -84,15 +84,18 @@ class Panel(rx.State):
     def has_next(self) -> bool:
         return (self.page + 1) * data.PAGE_SIZE < self.total
 
+    def open_page(self, route: str) -> None:
+        """Remember which page is showing, so the timer only reloads that page's data."""
+        self.route = route
+        self.refresh()
+
     def refresh(self) -> None:
-        """Reload everything from the database. Safe to call on a timer."""
+        """Reload the visible page from the database. Safe to call on a timer."""
         if not data.database_exists():
-            self.connected = False
             return
         try:
             with data.read_only_store() as store:
                 self._load(store)
-            self.connected = True
         except DatabaseLocked as error:
             LOGGER.debug("database busy, keeping the last reading: %s", error)
 
@@ -155,7 +158,18 @@ class Panel(rx.State):
         if self.expanded_span:
             self.refresh()
 
-    def _load(self, store) -> None:
+    def _load(self, store: Store) -> None:
+        loader = {
+            "/": self._load_overview,
+            "/traces": self._load_traces,
+            "/experiments": self._load_experiments,
+            "/datasets": self._load_datasets,
+            "/audits": self._load_audits,
+        }.get(self.route, self._load_overview)
+        loader(store)
+        self.footer = data.footer(store)
+
+    def _load_overview(self, store: Store) -> None:
         self.summary = data.summary(store, hours=WINDOW_HOURS)
         series = queries.daily_series(store, days=SERIES_DAYS)
         self.volume = data.volume_series(series)
@@ -168,6 +182,7 @@ class Panel(rx.State):
         )
         self.errors = data.error_rows(queries.recent_errors(store))
 
+    def _load_traces(self, store: Store) -> None:
         self.total = queries.count_traces(store, self.search)
         self.traces = data.trace_rows(
             queries.browse_traces(
@@ -191,12 +206,7 @@ class Panel(rx.State):
             self.input_parts = data.json_parts(opened["input"]) if opened else []
             self.output_parts = data.json_parts(opened["output"]) if opened else []
 
-        self._load_experiments(store)
-        self._load_datasets(store)
-        self._load_audits(store)
-        self.footer = data.footer(store)
-
-    def _load_experiments(self, store) -> None:
+    def _load_experiments(self, store: Store) -> None:
         rows = queries.experiments(store)
         self.experiments = data.experiment_rows(rows)
         if not self.experiment_name:
@@ -224,7 +234,7 @@ class Panel(rx.State):
             else []
         )
 
-    def _load_datasets(self, store) -> None:
+    def _load_datasets(self, store: Store) -> None:
         self.datasets = data.dataset_rows(queries.datasets(store))
         self.dataset_items = (
             data.dataset_item_rows(queries.dataset_items(store, self.dataset_name))
@@ -232,7 +242,7 @@ class Panel(rx.State):
             else []
         )
 
-    def _load_audits(self, store) -> None:
+    def _load_audits(self, store: Store) -> None:
         self.audits = data.audit_rows(faithfulness_audit.recent(store, limit=50))
         if not self.audit_id:
             return

@@ -7,3 +7,6 @@ dist/
 *.egg-info/
 *.duckdb
 *.db
+.coverage
+htmlcov/
+.web/

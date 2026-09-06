@@ -12,9 +12,11 @@ from . import context, cost, models, spool
 
 LOGGER = logging.getLogger(__name__)
 
-# Ids of return values already priced by a descendant span. A function that just
-# returns its child's LLM response must not have those tokens counted twice.
-_priced_outputs: contextvars.ContextVar[Optional[Set[int]]] = contextvars.ContextVar(
+# Return values already priced by a descendant span, so a function that merely
+# passes its child's LLM response along does not get those tokens counted twice.
+# Keyed by identity *and* usage: an id on its own can be recycled by the allocator
+# once the earlier object is collected.
+_priced_outputs: contextvars.ContextVar[Optional[Set[tuple]]] = contextvars.ContextVar(
     "evalforge_priced_outputs", default=None
 )
 
@@ -192,9 +194,10 @@ def _record_usage(span: models.Span, output: Any) -> None:
 
     priced = _priced_outputs.get()
     if priced is not None:
-        if id(output) in priced:
+        fingerprint = (id(output), prompt_tokens, completion_tokens)
+        if fingerprint in priced:
             return
-        priced.add(id(output))
+        priced.add(fingerprint)
 
     span.model = model
     span.prompt_tokens = prompt_tokens

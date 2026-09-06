@@ -43,7 +43,7 @@ def eval_run(config: Path) -> None:
     task = _import_callable(spec["task"])
     chosen = [_metric(name) for name in spec.get("metrics", [])]
 
-    result = evaluate(
+    experiment = evaluate(
         dataset=spec["dataset"],
         task=task,
         metrics=chosen,
@@ -51,7 +51,7 @@ def eval_run(config: Path) -> None:
         num_workers=int(spec.get("workers", 4)),
         model=spec.get("model", DEFAULT_MODEL),
     )
-    _print_experiment(result)
+    _print_experiment(experiment)
 
 
 @eval_group.command("list")
@@ -158,11 +158,11 @@ def audit_run(trace_id: str, model: str) -> None:
     """Audit the RAG trace TRACE_ID claim by claim. An id prefix is enough."""
     with Store() as store:
         try:
-            result = faithfulness_audit.audit_trace(store, trace_id, model=model)
+            report = faithfulness_audit.audit_trace(store, trace_id, model=model)
         except (LookupError, ValueError) as error:
             raise click.ClickException(str(error)) from error
-        faithfulness_audit.save(store, result)
-    _print_audit(result)
+        faithfulness_audit.save(store, report)
+    _print_audit(report)
 
 
 @audit_group.command("list")
@@ -198,12 +198,12 @@ def audit_show(audit_id: str) -> None:
     """Show one audit claim by claim. An id prefix is enough."""
     with _read_only() as store:
         try:
-            result = faithfulness_audit.load(store, audit_id)
+            report = faithfulness_audit.load(store, audit_id)
         except ValueError as error:
             raise click.ClickException(str(error)) from error
-    if result is None:
+    if report is None:
         raise click.ClickException(f"no audit matching {audit_id!r}")
-    _print_audit(result)
+    _print_audit(report)
 
 
 def _print_experiment(result: ExperimentResult) -> None:
@@ -287,7 +287,7 @@ def _score_cell(score: Optional[Dict[str, Any]]) -> str:
     if "error" in score:
         return "[red]err[/red]"
     value = score["value"]
-    good = value >= 0.5 if score.get("higher_is_better", True) else value <= 0.5
+    good = metrics.is_good(value, score.get("higher_is_better", True))
     return f"[{'green' if good else 'yellow'}]{value:.2f}[/]"
 
 

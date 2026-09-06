@@ -24,6 +24,11 @@ Answer with a single JSON object and nothing else:
 """
 
 
+def is_good(value: float, higher_is_better: bool = True) -> bool:
+    """Whether a score sits on the good side of the midpoint for its own polarity."""
+    return value >= 0.5 if higher_is_better else value <= 0.5
+
+
 @dataclasses.dataclass
 class Score:
     metric_name: str
@@ -35,7 +40,7 @@ class Score:
     @property
     def failed(self) -> bool:
         """True when the score is on the bad side of the midpoint."""
-        return self.value < 0.5 if self.higher_is_better else self.value > 0.5
+        return not is_good(self.value, self.higher_is_better)
 
 
 def hallucination(

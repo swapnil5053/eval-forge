@@ -121,26 +121,26 @@ def build():
         Costs judge tokens: two LLM calls per audit.
         """
         with _reader() as store:
-            result = faithfulness_audit.audit_trace(store, trace_id, model=model)
+            report = faithfulness_audit.audit_trace(store, trace_id, model=model)
 
-        saved = _save_audit(result)
+        saved = _save_audit(report)
         return {
-            "audit_id": result.id,
-            "trace_id": result.trace_id,
-            "score": result.score,
+            "audit_id": report.id,
+            "trace_id": report.trace_id,
+            "score": report.score,
             "saved": saved,
-            "query": result.query,
-            "answer": result.answer,
+            "query": report.query,
+            "answer": report.answer,
             "claims": [
                 {
                     "claim": claim.claim,
                     "verdict": claim.verdict,
                     "severity": claim.severity,
                     "rationale": claim.rationale,
-                    "evidence": result.evidence_for(claim),
+                    "evidence": report.evidence_for(claim),
                 }
                 for claim in sorted(
-                    result.claims, key=lambda claim: claim.severity, reverse=True
+                    report.claims, key=lambda claim: claim.severity, reverse=True
                 )
             ],
         }
@@ -174,11 +174,11 @@ def _reader() -> Store:
     return Store(path, read_only=True)
 
 
-def _save_audit(result: Any) -> bool:
-    """Persist the audit if the write lock is free; report it rather than failing."""
+def _save_audit(report: Any) -> bool:
+    """Persist the audit if the write lock is free; say so rather than failing."""
     try:
         with Store() as store:
-            faithfulness_audit.save(store, result)
+            faithfulness_audit.save(store, report)
     except DatabaseLocked as error:
         LOGGER.debug("audit not saved, database busy: %s", error)
         return False
