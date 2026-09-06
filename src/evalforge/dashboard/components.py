@@ -11,13 +11,14 @@ def backdrop() -> rx.Component:
     """The same lit backdrop the landing page uses, dimmed for a working surface.
 
     Two diagonal sweeps drift across a faint wash and are cut by the grid, all of it
-    masked to the top of the viewport so it never competes with a table. Values are
-    roughly half the landing page's: this is read all day, not glanced at once.
+    masked to the top of the viewport so it never competes with a table. Values sit
+    just under the landing page's: this is read all day, not glanced at once.
     """
     return rx.el.div(
         rx.el.div(
             rx.el.div(style={"position": "absolute", "inset": "0",
-                             "background": "rgba(255,255,255,0.015)"}),
+                             "background": "rgba(255,255,255,0.024)"}),
+            rx.el.div(style={"position": "absolute", "inset": "0", "background": _GLOW}),
             rx.el.div(style={**_SWEEP, "background": _SWEEP_ONE,
                              "animation": "efSweep 42s linear infinite"}),
             rx.el.div(style={**_SWEEP, "background": _SWEEP_TWO,
@@ -51,18 +52,19 @@ def backdrop() -> rx.Component:
 
 
 _MASK = (
-    "radial-gradient(ellipse 100% 70% at 50% 0%, #000 0%, rgba(0,0,0,0.45) 55%, transparent 88%)"
+    "radial-gradient(ellipse 115% 85% at 50% 8%, #000 0%, rgba(0,0,0,0.55) 58%, transparent 94%)"
 )
+_GLOW = "radial-gradient(ellipse 70% 55% at 50% 0%, rgba(168,201,127,0.075) 0%, rgba(168,201,127,0) 70%)"
 _SWEEP = {"position": "absolute", "inset": "-40% -20%", "background_size": "300% 300%"}
 _SWEEP_ONE = (
     "repeating-linear-gradient(115deg,"
-    "rgba(168,201,127,0) 0%,rgba(168,201,127,0) 6.5%,rgba(168,201,127,0.05) 9.2%,"
-    "rgba(143,182,168,0.085) 10%,rgba(168,201,127,0.05) 10.8%,rgba(168,201,127,0) 13.5%,"
+    "rgba(168,201,127,0) 0%,rgba(168,201,127,0) 6.5%,rgba(168,201,127,0.09) 9.2%,"
+    "rgba(143,182,168,0.155) 10%,rgba(168,201,127,0.09) 10.8%,rgba(168,201,127,0) 13.5%,"
     "rgba(168,201,127,0) 20%)"
 )
 _SWEEP_TWO = (
     "repeating-linear-gradient(115deg,"
-    "rgba(143,182,168,0) 0%,rgba(143,182,168,0) 11%,rgba(143,182,168,0.04) 16%,"
+    "rgba(143,182,168,0) 0%,rgba(143,182,168,0) 11%,rgba(143,182,168,0.068) 16%,"
     "rgba(143,182,168,0) 21%,rgba(143,182,168,0) 33%)"
 )
 

@@ -45,6 +45,7 @@
   html { background: var(--bg); scroll-behavior: smooth; }
   body {
     margin: 0;
+    position: relative;
     background: var(--bg);
     color: var(--text);
     font-family: var(--sans);
@@ -63,7 +64,8 @@
   @keyframes ef-sweep { 0% { background-position: 200% 200%; } 100% { background-position: 0% 0%; } }
 
   /* ---------- backdrop ---------- */
-  .backdrop { position: fixed; inset: -80px; z-index: 0; pointer-events: none; overflow: hidden; }
+  .backdrop { position: absolute; top: -80px; left: -80px; right: -80px; height: 1120px;
+    z-index: 0; pointer-events: none; overflow: hidden; }
   .backdrop__mask {
     position: absolute; inset: 0;
     -webkit-mask-image: radial-gradient(ellipse 100% 82% at 50% 24%, #000 0%, rgba(0,0,0,.5) 58%, transparent 92%);
@@ -91,7 +93,7 @@
   }
 
   .progress { position: fixed; top: 0; left: 0; height: 1.5px; width: 0; background: var(--accent); z-index: 60; opacity: .85; }
-  .page { position: relative; background: var(--bg); overflow-x: hidden; }
+  .page { position: relative; z-index: 1; overflow-x: hidden; }
   .shell { max-width: var(--shell); margin: 0 auto; padding-inline: 28px; }
 
   /* ---------- pills ---------- */
