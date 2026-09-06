@@ -15,7 +15,7 @@ from ..storage import queries
 from ..storage.duckdb_store import Store
 from ..storage.ingest import ingest_once
 from .commands_eval import commands as eval_commands
-from .serve import mcp_group, serve
+from .serve import mcp_group, require_dashboard, serve
 from .support import brief as _brief
 from .support import console, cost as _cost, milliseconds as _ms
 from .support import read_only_store as _read_only, span_type as _type, status as _status
@@ -54,6 +54,11 @@ def demo(ctx: click.Context, db: Optional[Path], replace: bool, no_serve: bool) 
 
     Nothing here calls a model, so no API key is needed. Use --replace to reseed.
     """
+    # Checked before seeding: filling a database and then failing to open the panel
+    # is a worse first run than being told what to install.
+    if not no_serve:
+        require_dashboard()
+
     with Store(db) as store:
         held = store.count("traces")
         if held and not replace:

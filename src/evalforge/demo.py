@@ -39,6 +39,8 @@ PASSAGES = (
     "Opened software and gift cards are not returnable.",
 )
 
+ANSWER = "Refunds go to the original payment method within 30 days of delivery."
+
 QUESTIONS = (
     "How are refunds issued?",
     "Can store credit become cash?",
@@ -68,7 +70,11 @@ def seed(store: Store, days: int = DAYS, rng_seed: int = SEED) -> Dict[str, int]
     store.upsert("datasets", [_dataset_row(dataset_id, now)])
     store.upsert("dataset_items", items)
 
-    experiments, results = _experiments(rng, dataset_id, items, now)
+    # Its own generator, so tuning the traffic above cannot quietly move the
+    # scores below and turn the regression this seeds into a rounding error.
+    experiments, results = _experiments(
+        random.Random(rng_seed + 1), dataset_id, items, now
+    )
     store.upsert("experiments", experiments)
     store.upsert("experiment_results", results)
 
@@ -167,7 +173,7 @@ def _span(
         "end_time": begin + datetime.timedelta(seconds=budget),
         "status": "ok",
         "input": {"question": question},
-        "output": {"passages": list(PASSAGES[:2])} if kind == "retrieval" else "…",
+        "output": {"passages": list(PASSAGES[:2])} if kind == "retrieval" else ANSWER,
         "error": None,
         "tags": [],
         "metadata": {},
@@ -233,9 +239,9 @@ def _experiments(
     comparison view has a red delta in it the first time anyone opens it.
     """
     runs = (
-        ("rag-v1", 5, {"faithfulness": 0.72, "answer_relevance": 0.81}),
-        ("rag-v2-prompt", 3, {"faithfulness": 0.86, "answer_relevance": 0.88}),
-        ("rag-v3-cheap-model", 1, {"faithfulness": 0.64, "answer_relevance": 0.79}),
+        ("rag-v1", 5, {"faithfulness": 0.74, "answer_relevance": 0.82}),
+        ("rag-v2-prompt", 3, {"faithfulness": 0.87, "answer_relevance": 0.89}),
+        ("rag-v3-cheap-model", 1, {"faithfulness": 0.55, "answer_relevance": 0.71}),
     )
     experiments, results = [], []
     for name, days_ago, centres in runs:
@@ -257,7 +263,7 @@ def _experiments(
                     "experiment_id": experiment_id,
                     "dataset_item_id": item["id"],
                     "trace_id": None,
-                    "output": {"answer": "…"},
+                    "output": {"answer": ANSWER},
                     "scores": {
                         metric: {
                             "metric_name": metric,

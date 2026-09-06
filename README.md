@@ -6,7 +6,7 @@ EvalForge records function calls and model usage, stores the results in a local 
 database, and provides tools to compare runs and inspect RAG answers at the claim level.
 No server, account, or hosted backend required.
 
-**Python 3.10+ · 6.9k lines · 212 tests · DuckDB · Apache-2.0**
+**Python 3.10+ · 6.9k lines · 216 tests · DuckDB · Apache-2.0**
 
 [Landing page](https://swapnil5053.github.io/eval-forge/)
 
@@ -28,7 +28,7 @@ No server, account, or hosted backend required.
 ## Try it without writing any code
 
 ```bash
-pip install evalforge
+pip install "evalforge[dashboard]"
 evalforge demo
 ```
 
@@ -363,7 +363,7 @@ evalforge trace stats
 Current test suite:
 
 ```text
-212 tests
+216 tests
 ```
 
 `docs/index.html` is the landing page — a self-contained file with no build step. Open it

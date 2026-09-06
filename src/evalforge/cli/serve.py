@@ -5,9 +5,10 @@ import. Rather than making the repository look like a Reflex app, serve scaffold
 that directory under the EvalForge home and points it back at this package.
 """
 
+import importlib.util
 import logging
-import shutil
 import subprocess
+import sys
 import threading
 import webbrowser
 from pathlib import Path
@@ -37,6 +38,19 @@ _MODULE = """from evalforge.dashboard.app import app
 
 __all__ = ["app"]
 """
+
+
+def dashboard_installed() -> bool:
+    """Whether reflex can be imported here, which is the interpreter that will run it."""
+    return importlib.util.find_spec("reflex") is not None
+
+
+def require_dashboard() -> None:
+    if not dashboard_installed():
+        raise click.ClickException(
+            "the dashboard needs reflex, which is not installed in this environment. "
+            "Install it with 'pip install \"evalforge[dashboard]\"'."
+        )
 
 
 @click.group("mcp")
@@ -73,10 +87,7 @@ def mcp_install() -> None:
 @click.option("--no-ingest", is_flag=True, help="Skip the ingestion pass on startup.")
 def serve(port: int, no_browser: bool, no_ingest: bool) -> None:
     """Ingest pending traces, then run the dashboard."""
-    if shutil.which("reflex") is None:
-        raise click.ClickException(
-            "the dashboard needs reflex. Install it with 'pip install evalforge[dashboard]'."
-        )
+    require_dashboard()
 
     if not no_ingest:
         with Store() as store:
@@ -92,9 +103,13 @@ def serve(port: int, no_browser: bool, no_ingest: bool) -> None:
     if not no_browser:
         threading.Timer(BROWSER_DELAY_SECONDS, webbrowser.open, args=[url]).start()
 
+    # Run reflex through this interpreter, not whichever one owns the reflex on
+    # PATH: those differ whenever evalforge lives in a virtualenv, and the other
+    # one cannot import evalforge to find the app.
     # --single-port is only valid with --env prod, and one URL is the point.
     command = [
-        "reflex", "run", "--env", "prod", "--single-port", "--frontend-port", str(port)
+        sys.executable, "-m", "reflex", "run",
+        "--env", "prod", "--single-port", "--frontend-port", str(port),
     ]
     try:
         subprocess.run(command, cwd=project, check=True)

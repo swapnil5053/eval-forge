@@ -82,3 +82,25 @@ def test_demo_needs_no_network_or_api_key(seeded, monkeypatch):
         text = handle.read()
     assert "litellm" not in text
     assert "requests" not in text
+
+
+def test_demo_checks_for_the_dashboard_before_it_writes_anything(home, monkeypatch):
+    """Seeding and then failing to open the panel is a worse first run than a message."""
+    from evalforge.cli import serve as serve_module
+
+    monkeypatch.setattr(serve_module, "dashboard_installed", lambda: False)
+    result = CliRunner().invoke(cli, ["demo"])
+
+    assert result.exit_code != 0
+    assert "evalforge[dashboard]" in result.output
+    assert not (home / "evalforge.db").exists()
+
+
+def test_no_serve_seeds_without_needing_the_dashboard(home, monkeypatch):
+    from evalforge.cli import serve as serve_module
+
+    monkeypatch.setattr(serve_module, "dashboard_installed", lambda: False)
+    result = CliRunner().invoke(cli, ["demo", "--no-serve"])
+
+    assert result.exit_code == 0, result.output
+    assert (home / "evalforge.db").exists()

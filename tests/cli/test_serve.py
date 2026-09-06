@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,7 @@ def launched(monkeypatch):
         calls["cwd"] = Path(cwd)
         return type("Completed", (), {"returncode": 0})()
 
-    monkeypatch.setattr(serve_module.shutil, "which", lambda name: "/usr/bin/reflex")
+    monkeypatch.setattr(serve_module, "dashboard_installed", lambda: True)
     monkeypatch.setattr(serve_module.subprocess, "run", fake_run)
     monkeypatch.setattr(serve_module.webbrowser, "open", lambda url: None)
     monkeypatch.setattr(serve_module.threading, "Timer", lambda *a, **k: type(
@@ -38,9 +39,16 @@ def test_single_port_requires_production_mode(home, launched):
 
     assert result.exit_code == 0, result.output
     command = launched["command"]
-    assert command[:2] == ["reflex", "run"]
+    assert command[:4] == [sys.executable, "-m", "reflex", "run"]
     assert "--single-port" in command
     assert command[command.index("--env") + 1] == "prod"
+
+
+def test_reflex_runs_under_this_interpreter_not_whichever_is_on_path(home, launched):
+    """A reflex outside this virtualenv cannot import evalforge to find the app."""
+    CliRunner().invoke(cli, ["serve", "--no-browser"], catch_exceptions=False)
+
+    assert launched["command"][0] == sys.executable
 
 
 def test_the_port_reaches_reflex_and_the_message(home, launched):
@@ -80,7 +88,7 @@ def test_no_ingest_skips_the_pass(home, launched, monkeypatch):
 
 
 def test_a_missing_reflex_says_what_to_install(home, monkeypatch):
-    monkeypatch.setattr(serve_module.shutil, "which", lambda name: None)
+    monkeypatch.setattr(serve_module, "dashboard_installed", lambda: False)
 
     result = CliRunner().invoke(cli, ["serve"])
 

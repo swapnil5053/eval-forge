@@ -153,3 +153,25 @@ def test_a_failed_batch_leaves_nothing_behind(tmp_path):
         with pytest.raises(Exception):
             store.upsert("spans", [{"id": "ok", "name": "a"}, {"trace_id": "no id"}])
         assert store.count("spans") == 0
+
+
+def test_text_is_stored_as_written_not_as_escapes(tmp_path):
+    """ensure_ascii would put \\u00e9 in the column and the panel would show it."""
+    with Store(tmp_path / "unicode.db") as store:
+        store.upsert(
+            "spans",
+            [
+                {
+                    "id": "s1",
+                    "trace_id": "t1",
+                    "name": "generate",
+                    "start_time": _WHEN,
+                    "output": {"answer": "un café — 東京"},
+                }
+            ],
+        )
+        stored = store.db.execute("SELECT output FROM spans").fetchone()[0]
+
+    assert "café" in stored
+    assert "東京" in stored
+    assert "\\u" not in stored

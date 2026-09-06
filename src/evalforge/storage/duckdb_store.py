@@ -158,7 +158,9 @@ def _encode(column: str, value: Any) -> Any:
     if column in _JSON_COLUMNS:
         # Spool values arrive already decoded, so a str here is a plain string
         # output and still needs quoting to be valid JSON.
-        return json.dumps(value, default=str)
+        # ensure_ascii would store an accent or a CJK character as an escape and
+        # the panel would show the escape, so text arrives as the user wrote it.
+        return json.dumps(value, default=str, ensure_ascii=False)
     if column in _TIME_COLUMNS and isinstance(value, str):
         return datetime.datetime.fromisoformat(value)
     return value
