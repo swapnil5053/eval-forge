@@ -92,7 +92,10 @@ def serve(port: int, no_browser: bool, no_ingest: bool) -> None:
     if not no_browser:
         threading.Timer(BROWSER_DELAY_SECONDS, webbrowser.open, args=[url]).start()
 
-    command = ["reflex", "run", "--single-port", "--frontend-port", str(port)]
+    # --single-port is only valid with --env prod, and one URL is the point.
+    command = [
+        "reflex", "run", "--env", "prod", "--single-port", "--frontend-port", str(port)
+    ]
     try:
         subprocess.run(command, cwd=project, check=True)
     except KeyboardInterrupt:
@@ -108,7 +111,9 @@ def _scaffold() -> Path:
     package.mkdir(parents=True, exist_ok=True)
 
     _write(project / "rxconfig.py", _CONFIG)
-    _write(package / "__init__.py", _MODULE)
+    # Reflex imports the package and then <app_name>.<app_name>. Defining the app in
+    # both places registers every page twice, so only the module carries it.
+    _write(package / "__init__.py", "")
     _write(package / f"{APP_NAME}.py", _MODULE)
     return project
 

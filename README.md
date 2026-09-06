@@ -4,7 +4,7 @@
 LLM-as-a-judge metrics, and audit RAG answers claim by claim — from one `pip install`,
 against a single DuckDB file. No server, no account, no cloud.
 
-`Python 3.10+` · `Apache-2.0` · `189 tests` · [landing page](docs/index.html)
+`Python 3.10+` · `Apache-2.0` · `195 tests` · [landing page](docs/index.html)
 
 ![EvalForge landing page](docs/screenshots/landing.png)
 
@@ -169,7 +169,7 @@ The dashboard builds its frontend on first launch, which needs network access on
 
 ```bash
 pip install -e ".[all]"
-python -m pytest                    # 189 tests
+python -m pytest                    # 195 tests
 python examples/rag_pipeline.py && evalforge ingest && evalforge trace stats
 ```
 
