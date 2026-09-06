@@ -33,9 +33,9 @@ mcp = ["mcp>=1.2"]
 all = ["evalforge[cost,eval,attribution,dashboard,mcp]"]
 
 [project.urls]
-Homepage = "https://github.com/swapnil5053/evalforge"
-Source = "https://github.com/swapnil5053/evalforge"
-Issues = "https://github.com/swapnil5053/evalforge/issues"
+Homepage = "https://github.com/swapnil5053/eval-forge"
+Source = "https://github.com/swapnil5053/eval-forge"
+Issues = "https://github.com/swapnil5053/eval-forge/issues"
 
 [project.scripts]
 evalforge = "evalforge.cli.main:cli"

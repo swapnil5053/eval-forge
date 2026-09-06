@@ -42,14 +42,28 @@ def shell(body: rx.Component, route: str) -> rx.Component:
 
 def _sidebar(route: str) -> rx.Component:
     return rx.el.nav(
+        # The same wordmark the landing page uses, down to the blinking caret.
         rx.el.div(
-            rx.el.span("EVAL", style={"color": styles.TEXT}),
-            rx.el.span("FORGE", style={"color": styles.ACCENT}),
+            rx.el.span("eval", style={"color": styles.TEXT}),
+            rx.el.span("forge", style={"color": styles.TEXT_DIM}),
+            rx.el.span(
+                style={
+                    "display": "inline-block",
+                    "width": "7px",
+                    "height": "2px",
+                    "background": styles.ACCENT,
+                    "margin_left": "3px",
+                    "margin_bottom": "2px",
+                    "vertical_align": "baseline",
+                    "animation": "efBlink 1.4s steps(1) infinite",
+                }
+            ),
             style={
                 "font_family": styles.MONO,
-                "font_size": "13px",
-                "letter_spacing": "0.18em",
-                "padding": f"{styles.SPACE_5} {styles.SPACE_4} {styles.SPACE_5}",
+                "font_size": "15px",
+                "font_weight": "500",
+                "letter_spacing": "-0.01em",
+                "padding": f"{styles.SPACE_5} {styles.SPACE_4}",
             },
         ),
         rx.el.div(*[_nav_item(name, href, route) for name, href in NAV]),
@@ -78,10 +92,10 @@ def _nav_item(name: str, href: str, route: str) -> rx.Component:
         href=href if built else "#",
         style={
             "display": "block",
-            "font_family": styles.SANS,
+            # Mono, like the chrome on the landing page.
+            "font_family": styles.MONO,
             "font_size": styles.FONT_BODY,
-            "letter_spacing": "0.06em",
-            "text_transform": "uppercase",
+            "letter_spacing": "0.02em",
             "text_decoration": "none",
             "color": colour,
             "padding": f"{styles.SPACE_2} {styles.SPACE_4}",
@@ -148,7 +162,13 @@ def audit_list() -> rx.Component:
 app = rx.App(
     style=styles.BASE,
     stylesheets=styles.STYLESHEETS,
-    head_components=[rx.el.style("body { margin: 0; }")],
+    head_components=[
+        rx.el.style(
+            "body { margin: 0; }"
+            "@keyframes efBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }"
+            "@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }"
+        )
+    ],
 )
 for page, route, title in (
     (index, "/", "EvalForge"),

@@ -17,7 +17,15 @@ def metric(
     """A dial: the number is the largest thing on screen, the caption is engraved."""
     return rx.el.div(
         rx.el.div(
-            rx.el.span(value, style=styles.METRIC),
+            # A placeholder is not a reading: dim it so an empty window does not look
+            # like a value someone should try to interpret.
+            rx.el.span(
+                value,
+                style={
+                    **styles.METRIC,
+                    "color": rx.cond(value == "—", styles.TEXT_FAINT, "inherit"),
+                },
+            ),
             rx.cond(
                 unit != "",
                 rx.el.span(

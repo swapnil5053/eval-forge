@@ -1,28 +1,36 @@
 """Every colour, size and font the dashboard uses.
 
-The look is an instrument panel: near-black ground, one warm accent, monospace for
-anything numeric, and borders instead of shadows. Nothing in the dashboard writes a
-colour or a size literal - it comes from here, so retuning the whole panel means
-editing this file.
+The palette and type are the same ones the landing page in ``docs/`` uses, so the
+product reads as one thing: a near-black ground with a faint warm cast, one green
+accent, Instrument Sans for words and JetBrains Mono for anything numeric.
+
+Where the panel deliberately departs from the landing page is density. Marketing
+pages breathe; an instrument does not. Corners stay square, padding stays tight and
+rows stay 26px, because this surface is read at a glance rather than scrolled
+through. Identity lives in colour and type, not in radius.
+
+Nothing else in the dashboard writes a colour or a size literal, so retuning the
+whole panel means editing this file.
 """
 
-# Ground and surfaces. The background is near-black with a slight cool cast, which
-# is what lets a warm accent read as an indicator lamp rather than a brand colour.
-BACKGROUND = "hsl(220, 14%, 7%)"
-SURFACE = "hsl(220, 13%, 9.5%)"
-SURFACE_RAISED = "hsl(220, 12%, 12.5%)"
-BORDER = "hsl(220, 10%, 17%)"
-BORDER_BRIGHT = "hsl(220, 10%, 27%)"
+# Ground and surfaces, straight from the landing page's tokens.
+BACKGROUND = "#0A0B0A"
+SURFACE = "#101110"
+SURFACE_RAISED = "#121312"
+BAND = "#0D0E0D"
+BORDER = "rgba(255, 255, 255, 0.07)"
+BORDER_BRIGHT = "rgba(255, 255, 255, 0.14)"
 
-TEXT = "hsl(0, 0%, 87%)"
-TEXT_DIM = "hsl(0, 0%, 55%)"
-TEXT_FAINT = "hsl(0, 0%, 36%)"
+TEXT = "#EDEFEC"
+TEXT_DIM = "#AEB5AB"
+TEXT_MUTED = "#828981"
+TEXT_FAINT = "#767D74"
 
-# One accent, used only for the active nav item, the primary chart series, bars, and
-# interactive affordances on hover. Status colours are not the accent.
-# Matches the accent on the landing page in docs/, so the product reads as one thing.
+# One accent: the active nav item, the primary chart series, bars, and interactive
+# affordances on hover. It doubles as the "good" status colour, as on the landing page.
 ACCENT = "#A8C97F"
-ACCENT_MUTED = "#5F7549"
+ACCENT_BRIGHT = "#BCDC92"
+ACCENT_MUTED = "rgba(168, 201, 127, 0.35)"
 
 OK = "#A8C97F"
 WARN = "#C9A961"
@@ -31,12 +39,12 @@ ERROR = "#C97A5A"
 # Chart series, dimmest first: p50 is background information, p99 is the alarm.
 SERIES = (TEXT_FAINT, TEXT_DIM, ACCENT)
 
-MONO = "'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', monospace"
-SANS = "'Inter', -apple-system, 'Segoe UI', 'Roboto', sans-serif"
+MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
+SANS = "'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif"
 
-FONT_LABEL = "10px"
+FONT_LABEL = "9.5px"
 FONT_SMALL = "11px"
-FONT_BODY = "12px"
+FONT_BODY = "12.5px"
 FONT_DATA = "12.5px"
 FONT_METRIC = "30px"
 
@@ -51,15 +59,15 @@ SIDEBAR_WIDTH = "200px"
 ROW_HEIGHT = "26px"
 
 STYLESHEETS = [
-    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500&"
+    "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&"
     "family=JetBrains+Mono:wght@400;500&display=swap"
 ]
 
 # Small, uppercase, letter-spaced and dim: the engraved label under a panel dial.
 LABEL = {
-    "font_family": SANS,
+    "font_family": MONO,
     "font_size": FONT_LABEL,
-    "letter_spacing": "0.11em",
+    "letter_spacing": "0.12em",
     "text_transform": "uppercase",
     "color": TEXT_FAINT,
     "line_height": "1",
@@ -149,13 +157,13 @@ BASE = {
     "color": TEXT,
     "font_family": SANS,
     "font_size": FONT_BODY,
-    "::selection": {"background": ACCENT_MUTED, "color": TEXT},
+    "-webkit-font-smoothing": "antialiased",
+    "::selection": {"background": ACCENT, "color": BACKGROUND},
     "::-webkit-scrollbar": {"width": "10px", "height": "10px"},
     "::-webkit-scrollbar-track": {"background": BACKGROUND},
-    "::-webkit-scrollbar-thumb": {"background": BORDER, "border": f"2px solid {BACKGROUND}"},
-    "::-webkit-scrollbar-thumb:hover": {"background": BORDER_BRIGHT},
+    "::-webkit-scrollbar-thumb": {"background": BORDER_BRIGHT, "border": f"2px solid {BACKGROUND}"},
+    "::-webkit-scrollbar-thumb:hover": {"background": TEXT_FAINT},
 }
-
 
 # Claim verdicts, worst last: the audit view colours by severity, not by score.
 VERDICT_COLOURS = {
