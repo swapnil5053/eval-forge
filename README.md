@@ -49,6 +49,10 @@ evalforge trace stats  # volume, p50/p95/p99, error rate, tokens, spend
 evalforge serve        # the dashboard, on localhost:8000
 ```
 
+The landing page above is a static file — open `docs/index.html` in a browser, or
+publish it by pointing GitHub Pages at the `docs/` folder. It is separate from the
+dashboard by design: the page is public, the panel reads your local traces.
+
 Or skip the tooling entirely — it is just a file:
 
 ```bash

@@ -7,6 +7,66 @@ import reflex as rx
 from . import styles
 
 
+def backdrop() -> rx.Component:
+    """The same lit backdrop the landing page uses, dimmed for a working surface.
+
+    Two diagonal sweeps drift across a faint wash and are cut by the grid, all of it
+    masked to the top of the viewport so it never competes with a table. Values are
+    roughly half the landing page's: this is read all day, not glanced at once.
+    """
+    return rx.el.div(
+        rx.el.div(
+            rx.el.div(style={"position": "absolute", "inset": "0",
+                             "background": "rgba(255,255,255,0.015)"}),
+            rx.el.div(style={**_SWEEP, "background": _SWEEP_ONE,
+                             "animation": "efSweep 42s linear infinite"}),
+            rx.el.div(style={**_SWEEP, "background": _SWEEP_TWO,
+                             "animation": "efSweep 67s linear infinite reverse"}),
+            rx.el.div(
+                style={
+                    "position": "absolute",
+                    "inset": "0",
+                    "background_image": (
+                        f"linear-gradient({styles.BACKGROUND} 2px, transparent 2px),"
+                        f"linear-gradient(90deg, {styles.BACKGROUND} 2px, transparent 2px)"
+                    ),
+                    "background_size": "74px 74px",
+                }
+            ),
+            style={
+                "position": "absolute",
+                "inset": "0",
+                "mask_image": _MASK,
+                "-webkit-mask-image": _MASK,
+            },
+        ),
+        style={
+            "position": "fixed",
+            "inset": "-80px",
+            "z_index": "0",
+            "pointer_events": "none",
+            "overflow": "hidden",
+        },
+    )
+
+
+_MASK = (
+    "radial-gradient(ellipse 100% 70% at 50% 0%, #000 0%, rgba(0,0,0,0.45) 55%, transparent 88%)"
+)
+_SWEEP = {"position": "absolute", "inset": "-40% -20%", "background_size": "300% 300%"}
+_SWEEP_ONE = (
+    "repeating-linear-gradient(115deg,"
+    "rgba(168,201,127,0) 0%,rgba(168,201,127,0) 6.5%,rgba(168,201,127,0.05) 9.2%,"
+    "rgba(143,182,168,0.085) 10%,rgba(168,201,127,0.05) 10.8%,rgba(168,201,127,0) 13.5%,"
+    "rgba(168,201,127,0) 20%)"
+)
+_SWEEP_TWO = (
+    "repeating-linear-gradient(115deg,"
+    "rgba(143,182,168,0) 0%,rgba(143,182,168,0) 11%,rgba(143,182,168,0.04) 16%,"
+    "rgba(143,182,168,0) 21%,rgba(143,182,168,0) 33%)"
+)
+
+
 def label(text: str, **overrides: Any) -> rx.Component:
     return rx.el.div(text, style={**styles.LABEL, **overrides})
 
