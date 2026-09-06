@@ -120,9 +120,13 @@ def test_group_rows_scale_to_the_largest():
     assert data.group_rows(rows, "cost")[1]["value"] == "$0.1000"
 
 
-def test_group_rows_when_everything_is_zero():
-    rows = [queries.GroupRow(key="a", spans=1, prompt_tokens=0, completion_tokens=0, cost_usd=0)]
-    assert data.group_rows(rows, "tokens")[0]["width"] == "0.0%"
+def test_group_rows_drops_rows_that_measure_zero():
+    rows = [
+        queries.GroupRow(key="a", spans=1, prompt_tokens=0, completion_tokens=0, cost_usd=0),
+        queries.GroupRow(key="b", spans=1, prompt_tokens=40, completion_tokens=0, cost_usd=0),
+    ]
+    assert [row["key"] for row in data.group_rows(rows, "tokens")] == ["b"]
+    assert data.group_rows(rows, "cost") == []
 
 
 def test_error_rows_show_only_the_exception_line():
@@ -149,8 +153,6 @@ def test_formatters():
     assert data.money(0.0001) == "$0.000100"
     assert data.truncate("a  b   c", 80) == "a b c"
     assert data.truncate("abcdef", 3) == "abc…"
-    assert data.megabytes(2048) == "2K"
-    assert data.megabytes(5 * 1024 * 1024) == "5.0M"
 
 
 def test_summary_of_an_empty_database(tmp_path):

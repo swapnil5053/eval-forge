@@ -73,16 +73,23 @@ def latency_series(points: List[queries.SeriesPoint]) -> List[Dict[str, Any]]:
 
 
 def group_rows(rows: List[queries.GroupRow], measure: str) -> List[Dict[str, Any]]:
-    """Bar rows carry their own width so the chart needs no scale of its own."""
-    values = [row.tokens if measure == "tokens" else row.cost_usd for row in rows]
-    largest = max(values, default=0)
+    """Bar rows carry their own width so the chart needs no scale of its own.
+
+    Rows measuring zero are dropped: a spend panel listing four functions at
+    $0.0000 is four lines with nothing in them to act on.
+    """
+    measured = [
+        (row, row.tokens if measure == "tokens" else row.cost_usd) for row in rows
+    ]
+    measured = [(row, value) for row, value in measured if value]
+    largest = max((value for _, value in measured), default=0)
     return [
         {
             "key": row.key,
             "value": f"{value:,}" if measure == "tokens" else f"${value:.4f}",
-            "width": f"{(value / largest * 100) if largest else 0:.1f}%",
+            "width": f"{(value / largest * 100):.1f}%",
         }
-        for row, value in zip(rows, values)
+        for row, value in measured
     ]
 
 
@@ -220,20 +227,14 @@ def attribution_row(store: Store, span_id: str) -> List[Dict[str, str]]:
 
 
 def footer(store: Store) -> Dict[str, str]:
-    """The readout at the bottom of the sidebar: rows held, freshness, file size."""
-    path = default_db_path()
-    stat = path.stat()
+    """The readout at the bottom of the sidebar: rows held and how fresh they are."""
+    written = default_db_path().stat().st_mtime
     return {
         "traces": f"{store.count('traces'):,}",
         "updated": clock(
-            datetime.datetime.fromtimestamp(stat.st_mtime, datetime.timezone.utc)
+            datetime.datetime.fromtimestamp(written, datetime.timezone.utc)
         ),
-        "size": megabytes(stat.st_size),
     }
-
-
-def megabytes(size: int) -> str:
-    return f"{size / 1024:.0f}K" if size < 1024 * 1024 else f"{size / 1024 / 1024:.1f}M"
 
 
 # Keys, strings, numbers and literals, in that order of preference.

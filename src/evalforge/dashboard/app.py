@@ -24,13 +24,6 @@ BUILT = {route for _, route in NAV}
 # Where the panel points back to: the public page this tool belongs to.
 PROJECT_URL = "https://swapnil5053.github.io/eval-forge/"
 
-# The same mark the landing page uses, inline so nothing is fetched.
-FAVICON = (
-    "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
-    "<rect width='32' height='32' fill='%230A0B0A'/>"
-    "<rect x='6' y='14' width='20' height='4' fill='%23A8C97F'/></svg>"
-)
-
 
 def shell(body: rx.Component, route: str) -> rx.Component:
     return rx.el.div(
@@ -125,7 +118,6 @@ def _readout() -> rx.Component:
     return rx.el.div(
         _readout_line("traces", Panel.footer["traces"]),
         _readout_line("updated", Panel.footer["updated"]),
-        _readout_line("db", Panel.footer["size"]),
         rx.el.a(
             "project page ↗",
             href=PROJECT_URL,
@@ -194,8 +186,6 @@ app = rx.App(
     style=styles.BASE,
     stylesheets=styles.STYLESHEETS,
     head_components=[
-        # Without this the browser asks for /favicon.ico on every load and logs a 404.
-        rx.el.link(rel="icon", href=FAVICON),
         rx.el.style(
             "body { margin: 0; }"
             "@keyframes efBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }"

@@ -15,14 +15,14 @@ def audits() -> rx.Component:
                     *[
                         rx.el.th(title, style={**styles.TABLE_HEADER, "cursor": "default"})
                         for title in (
-                            "", "audit", "trace", "query", "score", "claims",
+                            "", "trace", "query", "score", "claims",
                             "unsupported", "contradicted", "at",
                         )
                     ]
                 )
             ),
             rx.el.tbody(
-                rx.cond(Panel.audits, rx.foreach(Panel.audits, _row), ui.empty_row(9))
+                rx.cond(Panel.audits, rx.foreach(Panel.audits, _row), ui.empty_row(8))
             ),
             style=styles.TABLE,
         ),
@@ -40,8 +40,7 @@ def _row(row: rx.Var) -> rx.Component:
             width="18px",
             padding_right="0",
         ),
-        ui.cell(row["short_id"], color=styles.TEXT_DIM),
-        ui.cell(row["trace_id"], color=styles.TEXT_FAINT),
+        ui.cell(row["trace_id"], color=styles.TEXT_DIM),
         ui.cell(row["query"], white_space="normal"),
         ui.cell(row["score"], color=row["colour"], text_align="right"),
         ui.cell(row["claims"], color=styles.TEXT_DIM, text_align="right"),
