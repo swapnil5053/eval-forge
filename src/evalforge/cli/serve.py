@@ -61,7 +61,8 @@ def mcp_group() -> None:
 @mcp_group.command("serve")
 def mcp_serve() -> None:
     """Run the MCP server on stdio, for Claude, Cursor or any MCP client."""
-    from ..mcp.server import StoreUnavailable, serve as run_server
+    from ..mcp.server import StoreUnavailable
+    from ..mcp.server import serve as run_server
 
     try:
         run_server()

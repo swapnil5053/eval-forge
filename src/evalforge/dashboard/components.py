@@ -54,7 +54,10 @@ def backdrop() -> rx.Component:
 _MASK = (
     "radial-gradient(ellipse 115% 85% at 50% 8%, #000 0%, rgba(0,0,0,0.55) 58%, transparent 94%)"
 )
-_GLOW = "radial-gradient(ellipse 70% 55% at 50% 0%, rgba(224,163,60,0.055) 0%, rgba(224,163,60,0) 70%)"
+_GLOW = (
+    "radial-gradient(ellipse 70% 55% at 50% 0%,"
+    "rgba(224,163,60,0.055) 0%,rgba(224,163,60,0) 70%)"
+)
 _SWEEP = {"position": "absolute", "inset": "-40% -20%", "background_size": "300% 300%"}
 _SWEEP_ONE = (
     "repeating-linear-gradient(115deg,"

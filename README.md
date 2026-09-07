@@ -6,6 +6,8 @@ EvalForge records function calls and model usage, stores the results in a local 
 database, and provides tools to compare runs and inspect RAG answers at the claim level.
 No server, account, or hosted backend required.
 
+[![ci](https://github.com/swapnil5053/eval-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/swapnil5053/eval-forge/actions/workflows/ci.yml)
+
 **Python 3.10+ · 6.9k lines · 216 tests · DuckDB · Apache-2.0**
 
 [Landing page](https://swapnil5053.github.io/eval-forge/)
@@ -355,10 +357,16 @@ as a non-root user, with a health check.
 ```bash
 pip install -e ".[all]"
 python -m pytest
+ruff check src tests
 python examples/rag_pipeline.py
 evalforge ingest
 evalforge trace stats
 ```
+
+CI runs the suite on Python 3.10, 3.11 and 3.12, lints, builds the Docker image, and
+installs the built wheel into an empty environment to seed a demo database with it —
+which is the only way to catch something missing from the package that tests importing
+from `src/` cannot see.
 
 Current test suite:
 

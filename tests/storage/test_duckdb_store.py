@@ -1,11 +1,11 @@
 import datetime
 import json
 
+import duckdb
 import pytest
 
 from evalforge.storage import duckdb_store as store_module
 from evalforge.storage.duckdb_store import Store
-
 
 _WHEN = datetime.datetime(2026, 9, 1, 12, 0, tzinfo=datetime.timezone.utc)
 
@@ -41,18 +41,25 @@ def test_schema_is_created(store):
 def test_insert_and_read_back(store):
     store.upsert("spans", [span_record()])
 
+    # epoch_ms rather than the column itself: reading a TIMESTAMPTZ makes DuckDB
+    # import pytz, which is not a dependency of this package, so a test that does
+    # it only passes on a machine that happens to have pytz for other reasons.
     row = store.db.execute(
-        "SELECT name, status, start_time, input FROM spans WHERE id = 's1'"
+        "SELECT name, status, epoch_ms(start_time), input FROM spans WHERE id = 's1'"
     ).fetchone()
     assert row[0] == "answer"
     assert row[1] == "ok"
-    assert row[2].tzinfo is not None
+    assert row[2] == int(
+        datetime.datetime(
+            2026, 9, 1, 10, 0, tzinfo=datetime.timezone.utc
+        ).timestamp() * 1000
+    )
     assert row[3] == '{"query": "hi"}'
 
 
 def test_start_then_end_merges_into_one_row(store):
     store.upsert("spans", [span_record()])
-    store.upsert("spans", 
+    store.upsert("spans",
         [
             span_record(
                 end_time="2026-09-01T10:00:02+00:00",
@@ -65,12 +72,14 @@ def test_start_then_end_merges_into_one_row(store):
 
     assert store.count("spans") == 1
     row = store.db.execute(
-        "SELECT status, error, end_time, input FROM spans WHERE id = 's1'"
+        "SELECT status, error, epoch_ms(end_time), input FROM spans WHERE id = 's1'"
     ).fetchone()
     assert row[0] == "error"
     assert row[1] == "boom"
-    assert row[2] == datetime.datetime(
-        2026, 9, 1, 10, 0, 2, tzinfo=datetime.timezone.utc
+    assert row[2] == int(
+        datetime.datetime(
+            2026, 9, 1, 10, 0, 2, tzinfo=datetime.timezone.utc
+        ).timestamp() * 1000
     )
     assert row[3] == '{"query": "hi"}'
 
@@ -150,7 +159,7 @@ def test_a_repeated_id_far_apart_still_merges(tmp_path):
 
 def test_a_failed_batch_leaves_nothing_behind(tmp_path):
     with Store(tmp_path / "rollback.db") as store:
-        with pytest.raises(Exception):
+        with pytest.raises(duckdb.Error):
             store.upsert("spans", [{"id": "ok", "name": "a"}, {"trace_id": "no id"}])
         assert store.count("spans") == 0
 

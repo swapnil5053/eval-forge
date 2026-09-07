@@ -45,7 +45,11 @@ def _row(row: rx.Var) -> rx.Component:
         ui.cell(row["score"], color=row["colour"], text_align="right"),
         ui.cell(row["claims"], color=styles.TEXT_DIM, text_align="right"),
         ui.cell(row["unsupported"], color=styles.ERROR, text_align="right"),
-        ui.cell(row["contradicted"], color=styles.VERDICT_COLOURS["CONTRADICTED"], text_align="right"),
+        ui.cell(
+            row["contradicted"],
+            color=styles.VERDICT_COLOURS["CONTRADICTED"],
+            text_align="right",
+        ),
         ui.cell(row["at"], color=styles.TEXT_FAINT),
         on_click=Panel.open_audit(row["id"]),
         style={"cursor": "pointer", "_hover": {"background": styles.SURFACE}},
@@ -66,7 +70,10 @@ def _report() -> rx.Component:
 def _header() -> rx.Component:
     return rx.el.div(
         rx.el.div(
-            rx.el.span(Panel.audit["score"], style={**styles.METRIC, "color": Panel.audit["colour"]}),
+            rx.el.span(
+                Panel.audit["score"],
+                style={**styles.METRIC, "color": Panel.audit["colour"]},
+            ),
             ui.label("faithfulness", margin_top=styles.SPACE_2),
             style={"padding_right": styles.SPACE_5, "border_right": f"1px solid {styles.BORDER}"},
         ),

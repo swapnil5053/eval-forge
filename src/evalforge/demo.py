@@ -10,7 +10,7 @@ today matches one taken next month.
 import datetime
 import random
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from .storage.duckdb_store import Store
 

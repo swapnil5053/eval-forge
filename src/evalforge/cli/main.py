@@ -9,7 +9,8 @@ import click
 from rich.table import Table
 from rich.tree import Tree
 
-from .. import __version__, demo as demo_data
+from .. import __version__
+from .. import demo as demo_data
 from ..core.spool import default_home, default_spool_dir
 from ..storage import queries
 from ..storage.duckdb_store import Store
@@ -17,8 +18,12 @@ from ..storage.ingest import ingest_once
 from .commands_eval import commands as eval_commands
 from .serve import mcp_group, require_dashboard, serve
 from .support import brief as _brief
-from .support import console, cost as _cost, milliseconds as _ms
-from .support import read_only_store as _read_only, span_type as _type, status as _status
+from .support import console
+from .support import cost as _cost
+from .support import milliseconds as _ms
+from .support import read_only_store as _read_only
+from .support import span_type as _type
+from .support import status as _status
 
 
 @click.group()
@@ -139,7 +144,10 @@ def trace_list(limit: int, hours: Optional[float]) -> None:
 def trace_search(query: str, limit: int) -> None:
     """Find traces whose name, input or output contains QUERY."""
     with _read_only() as store:
-        _print_traces(queries.search_traces(store, query, limit=limit), f"Traces matching {query!r}")
+        _print_traces(
+            queries.search_traces(store, query, limit=limit),
+            f"Traces matching {query!r}",
+        )
 
 
 @trace.command("slow")
@@ -168,7 +176,11 @@ def trace_stats(hours: float) -> None:
         error_style = "red" if summary.errors else "green"
         for label, value in [
             ("traces", str(summary.traces)),
-            ("errors", f"[{error_style}]{summary.errors} ({summary.error_rate:.0%})[/{error_style}]"),
+            (
+                "errors",
+                f"[{error_style}]{summary.errors} "
+                f"({summary.error_rate:.0%})[/{error_style}]",
+            ),
             ("latency avg", _ms(summary.avg_latency_ms)),
             ("latency p50", _ms(summary.p50_latency_ms)),
             ("latency p95", _ms(summary.p95_latency_ms)),

@@ -78,7 +78,9 @@ def attribute(
     resolved = _resolve_method(method)
     baseline = float(score_fn(text))
     scores = (
-        _shap_scores(tokens, score_fn) if resolved == "shap" else _occlusion_scores(tokens, score_fn, baseline)
+        _shap_scores(tokens, score_fn)
+        if resolved == "shap"
+        else _occlusion_scores(tokens, score_fn, baseline)
     )
 
     return Attribution(

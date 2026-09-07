@@ -16,7 +16,8 @@ from ..eval.judge import DEFAULT_MODEL
 from ..storage import queries
 from ..storage.duckdb_store import Store
 from .support import brief as _brief
-from .support import console, read_only_store as _read_only
+from .support import console
+from .support import read_only_store as _read_only
 
 VERDICT_COLOURS = {
     faithfulness_audit.SUPPORTED: "green",
@@ -107,7 +108,13 @@ def eval_show(name: str) -> None:
         raise click.ClickException(f"no experiment named {name!r}")
 
     parsed = [
-        (item_id, json.loads(output) if output else None, json.loads(scores or "{}"), latency, error)
+        (
+            item_id,
+            json.loads(output) if output else None,
+            json.loads(scores or "{}"),
+            latency,
+            error,
+        )
         for item_id, output, scores, latency, error in rows
     ]
     metric_names = sorted({key for _, _, scores, _, _ in parsed for key in scores})

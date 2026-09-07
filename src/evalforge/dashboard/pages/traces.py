@@ -98,7 +98,10 @@ def _span_tree() -> rx.Component:
                 },
             ),
             col_span=len(COLUMNS) + 1,
-            style={"padding": f"0 0 {styles.SPACE_3} 0", "border_bottom": f"1px solid {styles.BORDER}"},
+            style={
+                "padding": f"0 0 {styles.SPACE_3} 0",
+                "border_bottom": f"1px solid {styles.BORDER}",
+            },
         )
     )
 

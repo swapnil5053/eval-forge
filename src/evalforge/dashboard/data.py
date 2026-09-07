@@ -331,7 +331,9 @@ def metric_means(row: Optional[queries.ExperimentRow]) -> List[Dict[str, str]]:
             "metric": metric,
             "mean": f"{row.means[metric]:.3f}",
             "colour": styles.score_colour(row.means[metric], row.polarity.get(metric, True)),
-            "direction": "higher is better" if row.polarity.get(metric, True) else "lower is better",
+            "direction": (
+                "higher is better" if row.polarity.get(metric, True) else "lower is better"
+            ),
         }
         for metric in row.metrics
     ]

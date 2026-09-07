@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      # Only the extras the suite actually exercises. reflex, litellm and shap are
+      # import-guarded, and the tests cover those paths without installing them.
+      - run: pip install -e ".[mcp]" pytest ruff
+      - run: ruff check src tests
+      - run: python -m pytest -q
+
+  demo:
+    # The path a stranger takes: install the built wheel into an empty
+    # environment and seed a database with it. Catches anything missing from the
+    # package that the tests, which import from src, cannot see.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build && python -m build --wheel
+      - run: pip install dist/*.whl
+      - run: evalforge demo --no-serve
+      - run: evalforge trace stats
+      - name: a regression must fail the command, not just print
+        run: |
+          if evalforge eval gate rag-v3-cheap-model --baseline rag-v1; then
+            echo "gate passed a run it should have failed"
+            exit 1
+          fi
+      - run: evalforge eval gate rag-v2-prompt --baseline rag-v1
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t evalforge:ci .

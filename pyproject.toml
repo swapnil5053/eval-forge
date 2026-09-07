@@ -45,3 +45,12 @@ packages = ["src/evalforge"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Errors, undefined names, whitespace, and import order - the things that are
+# wrong rather than the things that are a matter of taste.
+select = ["E", "F", "W", "I"]
