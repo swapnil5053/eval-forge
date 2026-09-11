@@ -1,31 +1,14 @@
 # EvalForge
 
 A local toolkit for **tracing, evaluating, and debugging LLM application pipelines**.
-
-EvalForge records function calls and model usage, stores the results in a local DuckDB
-database, and provides tools to compare runs and inspect RAG answers at the claim level.
-No server, account, or hosted backend required.
+It records function calls and model usage into a local DuckDB database, compares runs, and
+inspects RAG answers at the claim level. No server, account, or hosted backend.
 
 [![ci](https://github.com/swapnil5053/eval-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/swapnil5053/eval-forge/actions/workflows/ci.yml)
 
-**Python 3.10+ · 6.9k lines · 216 tests · DuckDB · Apache-2.0**
-
-[Landing page](https://swapnil5053.github.io/eval-forge/)
+**Python 3.10+ · 6.9k lines · 216 tests · DuckDB · Apache-2.0** · [Landing page](https://swapnil5053.github.io/eval-forge/)
 
 ![EvalForge](docs/screenshots/landing.png)
-
----
-
-## Features
-
-* **Tracing** — instrument functions with `@trace` and record nested calls, latency, tokens, errors, and cost.
-* **Evaluation** — run built-in or custom metrics across datasets, with concurrent execution.
-* **RAG auditing** — break an answer into individual claims and check each one against retrieved context.
-* **Experiment tracking** — store runs and evaluation results in a queryable DuckDB database.
-* **Attribution** — inspect which input tokens influence a score, using SHAP or occlusion.
-* **Interfaces** — local dashboard, CLI, and MCP server.
-
----
 
 ## Try it without writing any code
 
@@ -34,21 +17,11 @@ pip install "evalforge[dashboard]"
 evalforge demo
 ```
 
-Seeds a week of sample traffic and opens the dashboard with every page populated —
-traces, an afternoon of failures, three experiments, a dataset, and three claim-level
-audit reports. Nothing calls a model, so no API key is needed, and the same seed
-produces the same database every time.
+Seeds a week of sample traffic and opens the dashboard with every page populated — traces,
+an afternoon of failures, three experiments, a dataset, three claim-level audits. Nothing
+calls a model, so no API key is needed, and the seed is fixed.
 
-## Quick start
-
-```bash
-pip install evalforge
-evalforge init
-```
-
-### Tracing
-
-Add `@trace` to the functions you want to inspect:
+## Trace
 
 ```python
 from evalforge import trace
@@ -63,53 +36,27 @@ def generate(question: str, context: list[str]):
 
 @trace(name="pipeline")
 def answer(question: str):
-    context = retrieve(question)
-    return generate(question, context)
+    return generate(question, retrieve(question))
 ```
-
-Load the traces and inspect them:
 
 ```bash
-evalforge ingest
-evalforge trace stats
-evalforge serve
+evalforge ingest       # load the spool into DuckDB
+evalforge trace stats  # volume, p50/p95/p99, error rate, tokens, spend
+evalforge serve        # the dashboard, on localhost:8000
 ```
 
-Traces are stored locally in:
-
-```text
-~/.evalforge/
-├── spool/
-└── evalforge.db
-```
-
-The database is plain DuckDB, so it can also be queried directly:
+Everything lands in `~/.evalforge/` — a `spool/` directory and one `evalforge.db`. It is
+plain DuckDB, so you can skip the tooling entirely:
 
 ```bash
-duckdb ~/.evalforge/evalforge.db \
-  "SELECT name, model, estimated_cost_usd FROM spans"
+duckdb ~/.evalforge/evalforge.db "SELECT name, model, estimated_cost_usd FROM spans"
 ```
 
----
+## Evaluate
 
-## Evaluation
-
-Eight metrics ship with the package:
-
-```text
-faithfulness
-hallucination
-answer_relevance
-context_precision
-context_recall
-toxicity
-coherence
-conciseness
-```
-
-Metrics are regular Python functions rather than objects with a required interface. The
-runner inspects each signature and passes only the arguments that function asks for, so a
-custom metric is written the same way as a built-in one.
+Metrics are regular Python functions, not objects with a required interface — the runner
+inspects each signature and passes only the arguments it asks for, so your own metric is
+written exactly like a built-in one.
 
 ```python
 from evalforge import evaluate
@@ -120,12 +67,13 @@ results = evaluate(
     task=my_pipeline,
     metrics=[faithfulness, hallucination],
     num_workers=4,
-    name="experiment-1",
+    name="rag-v2",
 )
 ```
 
-Evaluation goes through LiteLLM, so the judge model can be changed without touching the
-evaluation code. Local models such as Ollama work too, which keeps the loop offline.
+Ships with `faithfulness`, `hallucination`, `answer_relevance`, `context_precision`,
+`context_recall`, `toxicity`, `coherence` and `conciseness`. The judge runs through
+LiteLLM, so any provider works — including a local Ollama, which keeps the loop offline.
 
 ### Failing a build on a regression
 
@@ -141,17 +89,14 @@ hallucination      0.120   0.090  +0.030  ok
 1 metric regressed past 0.050: faithfulness
 ```
 
-Exits non-zero, so it can gate a pull request. Which direction counts as a regression
-comes from each score's own polarity — hallucination rising fails for the same reason
+Exits non-zero, so it can gate a pull request. Which direction counts as a regression comes
+from each score's own polarity — hallucination rising fails for the same reason
 faithfulness falling does.
 
----
-
-## RAG claim audit
+## Claim-level RAG audit
 
 A single faithfulness score does not show *which part* of an answer is wrong. The audit
-splits an answer into claims and compares each claim with the context the application
-actually retrieved.
+splits the answer into claims and checks each against the context actually retrieved.
 
 ![Claim-level audit](docs/screenshots/audit.png)
 
@@ -159,187 +104,70 @@ actually retrieved.
 evalforge audit run 1b4343ea
 ```
 
-Each claim gets one of four verdicts:
-
-```text
-SUPPORTED             the context states it
-PARTIALLY_SUPPORTED   the context implies part of it
-UNSUPPORTED           the context is silent
-CONTRADICTED          the context says otherwise
-```
-
-Claims are ranked by severity, with contradictions treated as more serious than missing
-evidence — the context was there and the answer went against it.
-
-An audit costs two model calls:
-
-1. Extract the claims from the answer.
-2. Classify each claim against the retrieved context.
-
----
+Every claim gets one of four verdicts — `SUPPORTED`, `PARTIALLY_SUPPORTED`, `UNSUPPORTED`,
+`CONTRADICTED` — ranked by severity, with a contradiction treated as worse than missing
+evidence: the context was there and the answer went against it. Two model calls per audit,
+one to extract the claims and one to classify them.
 
 ## Architecture
 
 ```text
-Application
-    │
-    │ @trace
-    ▼
-NDJSON spool
-    │
-    │ ingest
-    ▼
-DuckDB
- ┌──┼──────────┐
- ▼  ▼          ▼
-CLI Dashboard  MCP
-    │
-    ▼
-Evaluation
-    │
-    ├── Metrics
-    ├── Experiments
-    └── RAG audits
+@trace → ~/.evalforge/spool/*.ndjson → ingest → evalforge.db → CLI · dashboard · MCP
+
+src/evalforge/
+├── core/       @trace, contextvar span stack, spool writer, cost estimation
+├── storage/    DuckDB, numbered SQL migrations, the analytical query layer
+├── eval/       judge, metrics, datasets, experiments, faithfulness audit, attribution
+├── dashboard/  Reflex panel — all styling flows from one styles.py
+├── mcp/        the MCP server
+└── cli/        init · ingest · status · trace · eval · audit · demo · serve · mcp
 ```
 
 The application never writes to DuckDB. `@trace` appends events to a per-process NDJSON
-file, and the ingester moves those events into the database later. This keeps tracing off
-the hot path and avoids several application processes competing for a write lock DuckDB
-only grants to one of them.
+file and the ingester moves them in later, which keeps tracing off the hot path and stops
+several processes competing for a write lock DuckDB grants to only one of them. The
+dashboard and MCP server open the database read-only, so both keep working while an
+evaluation holds that lock.
 
----
+## Four decisions worth explaining
 
-## Engineering details
+**Spool, not a socket.** A file being written ends in `.ndjson.active` and is renamed once
+sealed, so the ingester never reads a half-written line; one abandoned by a crashed process
+is adopted after a timeout.
 
-### Non-blocking tracing
-
-Trace events go to spool files rather than to the database. A file being written is named:
-
-```text
-*.ndjson.active
-```
-
-and is renamed once sealed, so the ingester never reads a half-written line. A file
-abandoned by a crashed process is adopted after a timeout.
-
-### Score polarity
-
-Every score records whether a higher value is better:
-
-```text
-faithfulness   → higher is better
-hallucination  → lower is better
-toxicity       → lower is better
-```
-
-Consumers read the declared polarity instead of assuming every score points the same way,
+**Every score declares its polarity.** Scores run 0–1, but `hallucination` and `toxicity`
+are *bad* when high. Every `Score` carries `higher_is_better` and every consumer reads it,
 so nothing in the codebase hard-codes "low is bad".
 
-### Ingestion is batched, but not blindly
+**Ingestion is batched, but not blindly.** Upserting spans one row at a time took 22
+seconds for 2,400 of them; a few hundred rows per statement takes 0.4. The catch is that
+DuckDB applies the conflict clause once per statement, so a span whose start and end land
+in the same batch would keep the first write and silently drop the second — exactly the
+merge the spool depends on. Batches are cut before any id they already hold.
 
-Upserting spans one row at a time took 22 seconds for 2,400 of them. They now go in a
-few hundred rows per statement, which takes 0.4. The catch is that DuckDB applies the
-conflict clause once per statement, so a span whose start and end arrive in the same
-batch would keep the first write and silently drop the second — exactly the merge the
-spool depends on. Batches are cut before any id they already hold, which preserves the
-merge and costs one extra statement per collision.
+**Costs are attributed once.** One model response can pass through several traced
+functions. Each is fingerprinted by identity *and* usage, so a wrapper that returns its
+child's response is not charged for tokens it did not request.
 
-### Cost accounting
-
-One model response can pass through several traced functions. Responses are fingerprinted
-by identity and usage, so a wrapper that returns its child's response is not charged for
-tokens it did not request.
-
-### Read-only inspection
-
-The dashboard and the MCP server open DuckDB read-only, so both keep working while an
-evaluation run holds the write lock.
-
----
-
-## Project structure
-
-```text
-src/evalforge/
-├── core/
-│   ├── tracer
-│   ├── context
-│   ├── spool
-│   └── cost
-│
-├── storage/
-│   ├── duckdb_store
-│   ├── migrations
-│   ├── ingest
-│   └── queries
-│
-├── eval/
-│   ├── metrics
-│   ├── judge
-│   ├── dataset
-│   ├── experiment
-│   ├── faithfulness_audit
-│   └── attribution
-│
-├── dashboard/
-├── mcp/
-└── cli/
-```
-
----
-
-## Stack
-
-| Area | Technology |
-| --- | --- |
-| Language | Python 3.10+ |
-| Storage | DuckDB |
-| Evaluation | LiteLLM |
-| Attribution | SHAP |
-| Dashboard | Reflex |
-| CLI | Click + Rich |
-| Testing | Pytest |
-| Integration | MCP |
-| Data format | NDJSON |
-| Containers | Docker |
-
----
-
-## Installation options
+## Install options
 
 | Extra | Includes |
 | --- | --- |
 | `evalforge` | Tracing, storage, CLI |
-| `evalforge[eval]` | Evaluation and LiteLLM |
-| `evalforge[dashboard]` | Dashboard |
+| `evalforge[eval]` | Judge metrics and cost estimation, via LiteLLM |
+| `evalforge[dashboard]` | Reflex dashboard |
 | `evalforge[mcp]` | MCP server |
-| `evalforge[attribution]` | SHAP attribution |
-| `evalforge[all]` | All components |
+| `evalforge[attribution]` | SHAP token attribution |
+| `evalforge[all]` | Everything |
 
----
-
-## MCP
-
-EvalForge includes an MCP server for querying traces and experiments from compatible
-clients such as Claude or Cursor.
+## Query it from Claude or Cursor
 
 ```bash
 evalforge mcp install
 ```
 
-Available operations:
-
-```text
-list_traces
-get_trace
-get_trace_stats
-search_traces
-list_experiments
-get_experiment
-run_faithfulness_audit
-```
-
----
+Exposes `list_traces`, `get_trace`, `get_trace_stats`, `search_traces`, `list_experiments`,
+`get_experiment` and `run_faithfulness_audit` over MCP.
 
 ## Docker
 
@@ -347,50 +175,30 @@ run_faithfulness_audit
 docker compose up --build
 ```
 
-One container with the dashboard and embedded DuckDB, storage on a named volume, running
-as a non-root user, with a health check.
-
----
+One container with the dashboard and embedded DuckDB, storage on a named volume, non-root,
+health-checked.
 
 ## Development
 
 ```bash
 pip install -e ".[all]"
-python -m pytest
+python -m pytest        # 216 tests
 ruff check src tests
-python examples/rag_pipeline.py
-evalforge ingest
-evalforge trace stats
 ```
 
 CI runs the suite on Python 3.10, 3.11 and 3.12, lints, builds the Docker image, and
-installs the built wheel into an empty environment to seed a demo database with it —
-which is the only way to catch something missing from the package that tests importing
-from `src/` cannot see.
+installs the built wheel into an empty environment to seed a demo database with it — the
+only way to catch something missing from the package that tests importing from `src/`
+cannot see.
 
-Current test suite:
-
-```text
-216 tests
-```
-
-`docs/index.html` is the landing page — a self-contained file with no build step. Open it
+`docs/index.html` is the landing page: one self-contained file, no build step. Open it
 directly, or point GitHub Pages at `docs/`.
-
----
 
 ## Attribution
 
-EvalForge is derived in part from [Opik](https://github.com/comet-ml/opik) by Comet ML.
-The tracing decorator pattern, context propagation model, and judge prompt rubrics were
-adapted from the Opik Python SDK. The storage layer, dashboard, claim-level audit system,
-attribution module, MCP server, CLI, and surrounding architecture were implemented
-independently.
-
-See [ATTRIBUTION.md](ATTRIBUTION.md) for the detailed breakdown.
-
----
-
-## License
+Derived in part from [Opik](https://github.com/comet-ml/opik) by Comet ML — the tracing
+decorator pattern, context propagation model and judge prompt rubrics are adapted from
+their Python SDK. The storage layer, dashboard, claim-level audit, attribution module, MCP
+server and CLI were built independently. Full breakdown in [ATTRIBUTION.md](ATTRIBUTION.md).
 
 Apache-2.0, inherited from Opik. See [LICENSE](LICENSE).
